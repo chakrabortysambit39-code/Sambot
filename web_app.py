@@ -36,12 +36,30 @@ def image(req: ImageRequest):
         return {"error":"Cloudflare image generation is not configured in Render."}
     url=f"https://api.cloudflare.com/client/v4/accounts/{account}/ai/run/@cf/black-forest-labs/flux-1-schnell"
     try:
-        r=requests.post(url,headers={"Authorization":f"Bearer {token}","Content-Type":"application/json"},json={"prompt":req.prompt,"steps":4},timeout=90)
-        r.raise_for_status()
-        image_b64=r.json()["result"]["image"]
+        r=requests.post(
+            url,
+            headers={"Authorization":f"Bearer {token}","Content-Type":"application/json","Accept":"application/json"},
+            json={"prompt":req.prompt,"steps":4},
+            timeout=120,
+        )
+        if not r.ok:
+            try:
+                err=r.json()
+            except Exception:
+                err=r.text[:1000]
+            return {"error":f"Cloudflare returned HTTP {r.status_code}: {err}"}
+        try:
+            data=r.json()
+        except Exception:
+            return {"error":f"Cloudflare returned a non-JSON response (HTTP {r.status_code})."}
+        image_b64=data.get("result",{}).get("image")
+        if not image_b64:
+            return {"error":f"Cloudflare response did not contain an image: {data}"}
         return {"image":f"data:image/jpeg;base64,{image_b64}"}
+    except requests.Timeout:
+        return {"error":"Cloudflare image generation timed out. Please try again."}
     except Exception as e:
-        return {"error":f"Cloudflare image generation failed: {e}"}
+        return {"error":f"Cloudflare image generation failed: {type(e).__name__}: {e}"}
 
 @app.post("/api/chat")
 def chat(req: ChatRequest):
