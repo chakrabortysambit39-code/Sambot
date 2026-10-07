@@ -9,3 +9,7 @@ services:
         sync: false
       - key: GROQ_MODEL
         value: llama-3.3-70b-versatile
+      - key: CLOUDFLARE_ACCOUNT_ID
+        sync: false
+      - key: CLOUDFLARE_API_TOKEN
+        sync: false
