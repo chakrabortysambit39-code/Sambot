@@ -69,7 +69,7 @@ def chat(req: ChatRequest):
     try:
         client=Groq(api_key=key)
         r=client.chat.completions.create(
-            model=os.getenv("GROQ_MODEL","llama-3.3-70b-versatile"),
+            model=os.getenv("GROQ_MODEL","openai/gpt-oss-120b"),
             messages=[
                 {"role":"system","content":"You are Sambot X, a helpful, smart, concise AI assistant. Be friendly and accurate."},
                 {"role":"user","content":req.message}
