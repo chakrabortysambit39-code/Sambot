@@ -5,7 +5,7 @@ import secrets
 import hashlib
 from fastapi import Request
 from fastapi import FastAPI
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel
 from groq import Groq
 
