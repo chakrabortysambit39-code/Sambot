@@ -23,109 +23,82 @@ HTML = r"""<!doctype html>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>SAMBOT X</title>
 <style>
-*{box-sizing:border-box}body{margin:0;font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#08090c;color:#f5f5f5}
-main{max-width:1100px;margin:auto;height:100vh;display:flex;flex-direction:column}
-header{height:64px;display:flex;align-items:center;justify-content:space-between;padding:0 18px;border-bottom:1px solid #24262d;background:#0b0c10;position:sticky;top:0;z-index:2}
-.brand{font-size:20px;font-weight:800}.tag{opacity:.5;font-size:11px;margin-left:8px}.actions{display:flex;gap:8px}
-.topbtn,.toolbtn{border:1px solid #2a2d35;background:#15171d;color:#eee;border-radius:10px;padding:9px 12px;cursor:pointer}.topbtn:hover,.toolbtn:hover{background:#20232b}
-.chat{flex:1;overflow:auto;padding:26px 20px 130px}
-.row{display:flex;margin:14px 0}.row.user{justify-content:flex-end}.msg{max-width:min(820px,85%);padding:14px 16px;border-radius:18px;line-height:1.55;white-space:pre-wrap;overflow-wrap:anywhere}.user .msg{background:#2c303a}.assistant .msg{background:#15171d}
-.meta{font-size:10px;opacity:.4;margin:5px 4px}.message-actions{display:flex;gap:6px;margin-top:7px}.mini{font-size:11px;border:1px solid #292c34;background:transparent;color:#aaa;border-radius:8px;padding:5px 8px;cursor:pointer}
-.image-result{display:block;max-width:100%;width:auto;border-radius:14px;margin-top:5px}.thinking{opacity:.6}
-.composer{position:fixed;bottom:0;left:0;right:0;display:flex;justify-content:center;padding:12px 16px 18px;background:linear-gradient(transparent,#08090c 22%)}
-.compose-inner{width:min(1050px,100%);background:#15171d;border:1px solid #30333c;border-radius:18px;padding:10px;box-shadow:0 10px 35px #0008}
-textarea{width:100%;resize:none;min-height:48px;max-height:180px;background:transparent;color:white;border:0;outline:0;padding:8px 9px;font:inherit}
-.controls{display:flex;align-items:center;justify-content:space-between;gap:8px}.left-tools,.right-tools{display:flex;gap:7px}.toolbtn{padding:7px 10px;font-size:12px}.send{background:#fff;color:#000;border-color:#fff;font-weight:700}.mic.active{background:#d33;color:#fff}
-.hint{text-align:center;opacity:.35;font-size:11px;padding:5px}.empty{max-width:720px;margin:15vh auto;text-align:center}.empty h1{font-size:36px;margin:0 0 10px}.empty p{opacity:.5}
-@media(max-width:650px){header{height:58px}.tag{display:none}.chat{padding:18px 12px 125px}.msg{max-width:92%}.empty h1{font-size:28px}.topbtn{padding:7px 9px}}
+*{box-sizing:border-box}body{margin:0;font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#08090c;color:#f5f5f5;height:100vh;overflow:hidden}
+button,input,textarea{font:inherit}.app{height:100vh;display:flex}.sidebar{width:280px;background:#0e1014;border-right:1px solid #252831;display:flex;flex-direction:column;padding:12px;flex-shrink:0}.brand{font-weight:800;font-size:19px;padding:8px}.brand small{opacity:.4;font-size:9px;margin-left:5px}.new{width:100%;border:1px solid #30343d;background:#171a20;color:#fff;border-radius:10px;padding:11px;text-align:left;cursor:pointer;font-weight:700}.new:hover,.chatitem:hover,.sidebtn:hover{background:#20242c}.search{margin:10px 0}.search input{width:100%;background:#171a20;border:1px solid #2c3038;color:#fff;border-radius:9px;padding:9px 10px;outline:0}.history-title{font-size:10px;color:#777b86;padding:7px}.history{flex:1;overflow:auto}.chatitem{display:flex;align-items:center;gap:6px;padding:9px 7px;border-radius:9px;cursor:pointer;margin:2px 0}.chatitem.active{background:#242832}.chatname{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;font-size:13px}.menu{border:0;background:transparent;color:#999;cursor:pointer}.sidebottom{border-top:1px solid #252831;padding-top:8px}.sidebtn{width:100%;background:transparent;border:0;color:#ddd;text-align:left;padding:10px 8px;border-radius:9px;cursor:pointer}.profile{display:flex;align-items:center;gap:9px;padding:10px 6px}.avatar{width:30px;height:30px;border-radius:50%;background:#303641;display:grid;place-items:center}.main{flex:1;min-width:0;display:flex;flex-direction:column}.topbar{height:62px;border-bottom:1px solid #252831;display:flex;align-items:center;justify-content:space-between;padding:0 18px}.model{font-weight:700}.status{font-size:10px;opacity:.4;margin-left:7px}.top-actions{display:flex;gap:7px}.iconbtn,.toolbtn{border:1px solid #2c3038;background:#15181e;color:#ddd;border-radius:9px;padding:8px 10px;cursor:pointer}.chat{flex:1;overflow:auto;padding:28px 20px 150px}.empty{max-width:720px;margin:12vh auto;text-align:center}.empty h1{font-size:38px;margin:0 0 9px}.empty p{opacity:.45}.row{display:flex;margin:16px 0}.row.user{justify-content:flex-end}.wrap{max-width:min(820px,88%)}.msg{padding:14px 16px;border-radius:18px;line-height:1.55;white-space:pre-wrap;overflow-wrap:anywhere;background:#15181e}.user .msg{background:#2c3039}.actions{display:flex;gap:5px;margin-top:6px}.mini{font-size:11px;border:1px solid #292d35;background:transparent;color:#999;border-radius:7px;padding:4px 7px;cursor:pointer}.image-result{display:block;max-width:100%;border-radius:14px}.thinking{opacity:.55}.composer{position:fixed;bottom:0;left:280px;right:0;display:flex;justify-content:center;padding:12px 18px 18px;background:linear-gradient(transparent,#08090c 25%)}.compose{width:min(900px,100%);background:#15181e;border:1px solid #343842;border-radius:18px;padding:10px;box-shadow:0 10px 35px #0009}.compose textarea{width:100%;min-height:48px;max-height:180px;resize:none;background:transparent;border:0;outline:0;color:#fff;padding:8px}.controls{display:flex;justify-content:space-between;gap:8px}.tools{display:flex;gap:6px}.toolbtn{padding:7px 10px;font-size:12px}.send{background:#fff;color:#000;font-weight:700}.modal{position:fixed;inset:0;background:#0009;display:none;align-items:center;justify-content:center;z-index:50}.modal.show{display:flex}.panel{width:min(500px,92%);background:#171a20;border:1px solid #343842;border-radius:16px;padding:20px}.panel h2{margin-top:0}.panel label{display:block;font-size:12px;opacity:.65;margin:14px 0 6px}.panel input{width:100%;background:#0e1014;border:1px solid #30343d;color:#fff;border-radius:8px;padding:10px}.panel button{margin-top:12px}.mobile{display:none}
+.light{background:#f7f7f8;color:#111}.light .sidebar,.light .topbar,.light .compose,.light .msg,.light .new,.light .search input,.light .iconbtn,.light .toolbtn,.light .panel{background:#fff;color:#111}.light .sidebar,.light .topbar{border-color:#ddd}.light textarea{color:#111}.light .user .msg{background:#e4e5e8}.light .chatitem:hover{background:#eee}
+@media(max-width:760px){.sidebar{position:fixed;z-index:40;left:-292px;top:0;bottom:0;transition:.2s}.sidebar.open{left:0}.composer{left:0}.mobile{display:inline-block}.topbar{height:58px}.empty h1{font-size:28px}}
 </style>
 </head>
 <body>
-<main>
-<header>
-<div class="brand">✨ SAMBOT X <span class="tag">Groq + Cloudflare AI</span></div>
-<div class="actions"><button class="topbtn" onclick="newChat()">＋ New chat</button><button class="topbtn" onclick="toggleTheme()">☼</button></div>
-</header>
-<section id="chat" class="chat">
-<div class="empty" id="empty"><h1>How can I help?</h1><p>Chat, code, write, explain, brainstorm — or type <b>create image</b> to generate an image.</p></div>
-</section>
-<div class="composer"><div class="compose-inner">
-<textarea id="box" rows="2" placeholder="Message Sambot X..."></textarea>
-<div class="controls">
-<div class="left-tools"><button class="toolbtn mic" id="mic" onclick="voice()">🎙 Voice</button><button class="toolbtn" onclick="clearChat()">Clear</button></div>
-<div class="right-tools"><button class="toolbtn send" onclick="send()">Send ➤</button></div>
+<div class="app">
+<aside class="sidebar" id="sidebar">
+<div class="brand">✨ SAMBOT X <small>AI ASSISTANT</small></div>
+<button class="new" onclick="newChat()">＋ New chat</button>
+<div class="search"><input id="search" placeholder="🔎 Search chats..." oninput="renderHistory()"></div>
+<div class="history-title">CHAT HISTORY</div>
+<div class="history" id="history"></div>
+<div class="sidebottom">
+<button class="sidebtn" onclick="openSettings()">⚙ Settings</button>
+<button class="sidebtn" onclick="exportChats()">⇩ Export chats</button>
+<button class="sidebtn" onclick="toggleTheme()">☼ Appearance</button>
+<div class="profile"><div class="avatar">S</div><div><b>Sambot User</b><div style="font-size:10px;opacity:.4">Personal</div></div></div>
 </div>
-<div class="hint">Enter to send • Shift+Enter for a new line • Say/type “create image …” for image generation</div>
+</aside>
+<section class="main">
+<header class="topbar">
+<div><button class="iconbtn mobile" onclick="toggleSidebar()">☰</button><span class="model">SAMBOT X</span><span class="status">Groq + Cloudflare AI</span></div>
+<div class="top-actions"><button class="iconbtn" onclick="newChat()">＋ New</button></div>
+</header>
+<section class="chat" id="chat"></section>
+<div class="composer"><div class="compose">
+<textarea id="box" rows="2" placeholder="Message Sambot X..."></textarea>
+<div class="controls"><div class="tools"><button class="toolbtn" id="mic" onclick="voice()">🎙 Voice</button></div><div class="tools"><button class="toolbtn send" onclick="send()">Send ➤</button></div></div>
+<div style="text-align:center;font-size:10px;opacity:.35;padding:5px">Enter to send • Shift+Enter for new line • Type “create image …” for images</div>
 </div></div>
-</main>
-<script>
-const box=document.getElementById('box'),chat=document.getElementById('chat'),empty=document.getElementById('empty'),mic=document.getElementById('mic');
-let history=JSON.parse(localStorage.getItem('sambot_history')||'[]');
+</section>
+</div>
 
-function save(){localStorage.setItem('sambot_history',JSON.stringify(history.slice(-40)))}
-function scroll(){chat.scrollTop=chat.scrollHeight}
-function removeEmpty(){if(empty)empty.remove()}
-function addMessage(text,role,extra){
- removeEmpty();
- const row=document.createElement('div');row.className='row '+role;
- const wrap=document.createElement('div');const msg=document.createElement('div');msg.className='msg';
- if(extra&&extra.image){const img=document.createElement('img');img.className='image-result';img.src=extra.image;msg.appendChild(img)}
- else msg.textContent=text;
- wrap.appendChild(msg);
- if(role==='assistant'&&!extra?.thinking){
-   const actions=document.createElement('div');actions.className='message-actions';
-   const copy=document.createElement('button');copy.className='mini';copy.textContent='Copy';copy.onclick=()=>navigator.clipboard?.writeText(text||'');
-   actions.appendChild(copy);
-   const speak=document.createElement('button');speak.className='mini';speak.textContent='🔊';speak.onclick=()=>speakText(text||'');
-   actions.appendChild(speak);wrap.appendChild(actions);
- }
- row.appendChild(wrap);chat.appendChild(row);scroll();return msg
-}
-function restore(){history.forEach(m=>addMessage(m.content,m.role))}
-function isImageRequest(s){return /\b(create|generate|make|draw|render)\s+(an?\s+)?image\b/i.test(s)||/^\/image\b/i.test(s)}
-function cleanImagePrompt(s){return s.replace(/^\/image\s*/i,'').replace(/^\s*(create|generate|make|draw|render)\s+(an?\s+)?image\s*(of|showing)?\s*/i,'').trim()||s}
-async function send(){
- const m=box.value.trim();if(!m)return;box.value='';
- if(isImageRequest(m)){await generateImage(cleanImagePrompt(m),m);return}
- history.push({role:'user',content:m});addMessage(m,'user');save();
- const thinking=addMessage('Thinking…','assistant',{thinking:true});thinking.classList.add('thinking');
- try{
-  const r=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({messages:history.slice(-20)})});
-  const j=await r.json();thinking.textContent=j.reply||j.error||'Something went wrong.';
-  history.push({role:'assistant',content:thinking.textContent});save();
-  const actions=document.createElement('div');actions.className='message-actions';
-  const copy=document.createElement('button');copy.className='mini';copy.textContent='Copy';copy.onclick=()=>navigator.clipboard?.writeText(thinking.textContent);actions.appendChild(copy);
-  const speak=document.createElement('button');speak.className='mini';speak.textContent='🔊';speak.onclick=()=>speakText(thinking.textContent);actions.appendChild(speak);
-  thinking.parentElement.appendChild(actions);
- }catch(e){thinking.textContent='Connection error: '+e.message}
-}
-async function generateImage(prompt,shown){
- history.push({role:'user',content:shown});addMessage(shown,'user');save();
- const holder=addMessage('Creating your image… ⚡','assistant',{thinking:true});holder.classList.add('thinking');
- try{
-  const r=await fetch('/api/image',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({prompt})});
-  const j=await r.json();
-  if(j.image){holder.textContent='';const img=document.createElement('img');img.className='image-result';img.src=j.image;holder.appendChild(img);history.push({role:'assistant',content:'[Generated image]'});save()}
-  else holder.textContent=j.error||'Image generation failed.';
- }catch(e){holder.textContent='Image error: '+e.message}
-}
-function newChat(){history=[];localStorage.removeItem('sambot_history');chat.innerHTML='<div class="empty" id="empty"><h1>New chat</h1><p>Ask anything, or type <b>create image</b> to generate an image.</p></div>'}
-function clearChat(){newChat()}
-function toggleTheme(){document.body.classList.toggle('light');if(document.body.classList.contains('light')){document.body.style.background='#f7f7f8';document.body.style.color='#111'}else{document.body.style.background='#08090c';document.body.style.color='#f5f5f5'}}
-function speakText(t){if('speechSynthesis' in window){speechSynthesis.cancel();speechSynthesis.speak(new SpeechSynthesisUtterance(t))}}
-function voice(){
- if(!('webkitSpeechRecognition' in window||'SpeechRecognition' in window)){alert('Voice input is not supported in this browser.');return}
- const R=window.SpeechRecognition||window.webkitSpeechRecognition;const rec=new R();rec.lang='en-IN';rec.interimResults=false;mic.classList.add('active');mic.textContent='⏺ Listening…';
- rec.onresult=e=>{box.value=e.results[0][0].transcript;mic.classList.remove('active');mic.textContent='🎙 Voice';box.focus()}
- rec.onerror=()=>{mic.classList.remove('active');mic.textContent='🎙 Voice'}
- rec.onend=()=>{mic.classList.remove('active');mic.textContent='🎙 Voice'}
- rec.start()
-}
+<div class="modal" id="settings"><div class="panel">
+<h2>⚙ Settings</h2>
+<label>Display name</label><input id="displayName" placeholder="Sambot User">
+<label>About</label><div style="opacity:.55;font-size:12px">SAMBOT X • Groq chat • Cloudflare image generation</div>
+<button class="toolbtn" onclick="saveSettings()">Save</button>
+<button class="toolbtn" onclick="closeSettings()">Close</button>
+</div></div>
+
+<script>
+const box=document.getElementById('box'),chat=document.getElementById('chat'),historyEl=document.getElementById('history'),sidebar=document.getElementById('sidebar');
+let sessions=JSON.parse(localStorage.getItem('sambot_sessions')||'[]'), currentId=localStorage.getItem('sambot_current')||'';
+let theme=localStorage.getItem('sambot_theme')||'dark';
+if(theme==='light')document.body.classList.add('light');
+function save(){localStorage.setItem('sambot_sessions',JSON.stringify(sessions));localStorage.setItem('sambot_current',currentId)}
+function current(){return sessions.find(x=>x.id===currentId)}
+function titleFor(s){return s.title||((s.messages.find(m=>m.role==='user')||{}).content||'New chat').slice(0,36)}
+function ensure(){if(!currentId||!current()){currentId=Date.now().toString();sessions.unshift({id:currentId,title:'New chat',messages:[]});save()}}
+function renderHistory(){ensure();const q=(document.getElementById('search').value||'').toLowerCase();historyEl.innerHTML='';sessions.filter(s=>titleFor(s).toLowerCase().includes(q)).forEach(s=>{const d=document.createElement('div');d.className='chatitem '+(s.id===currentId?'active':'');const n=document.createElement('span');n.className='chatname';n.textContent=titleFor(s);n.onclick=()=>loadChat(s.id);const m=document.createElement('button');m.className='menu';m.textContent='⋯';m.onclick=e=>{e.stopPropagation();chatMenu(s.id)};d.append(n,m);historyEl.appendChild(d)})}
+function renderChat(){chat.innerHTML='';const s=current();if(!s||!s.messages.length){chat.innerHTML='<div class="empty"><h1>How can I help?</h1><p>Chat, code, write, study, brainstorm — or type <b>create image</b>.</p></div>';return} s.messages.forEach(m=>drawMessage(m))}
+function drawMessage(m){const row=document.createElement('div');row.className='row '+m.role;const wrap=document.createElement('div');wrap.className='wrap';const msg=document.createElement('div');msg.className='msg';if(m.image){const img=document.createElement('img');img.className='image-result';img.src=m.image;msg.appendChild(img)}else msg.textContent=m.content||'';wrap.appendChild(msg);if(m.role==='assistant'&&!m.image){const acts=document.createElement('div');acts.className='actions';const cp=document.createElement('button');cp.className='mini';cp.textContent='Copy';cp.onclick=()=>navigator.clipboard?.writeText(m.content||'');acts.appendChild(cp);const sp=document.createElement('button');sp.className='mini';sp.textContent='🔊';sp.onclick=()=>speakText(m.content||'');acts.appendChild(sp);const rg=document.createElement('button');rg.className='mini';rg.textContent='↻ Regenerate';rg.onclick=()=>regenerate();acts.appendChild(rg);wrap.appendChild(acts)}row.appendChild(wrap);chat.appendChild(row)}
+function loadChat(id){currentId=id;save();renderHistory();renderChat();sidebar.classList.remove('open')}
+function newChat(){currentId=Date.now().toString();sessions.unshift({id:currentId,title:'New chat',messages:[]});save();renderHistory();renderChat();box.focus()}
+function chatMenu(id){const s=sessions.find(x=>x.id===id);if(!s)return;const action=prompt('Type rename or delete');if(action==='rename'){const n=prompt('New chat name',titleFor(s));if(n){s.title=n;save();renderHistory()}}else if(action==='delete'){if(confirm('Delete this chat?')){sessions=sessions.filter(x=>x.id!==id);if(currentId===id)currentId='';ensure();save();renderHistory();renderChat()}}}
+function add(role,content,image){const s=current();s.messages.push({role,content,image});if(role==='user'&&s.title==='New chat')s.title=content.slice(0,36);save();drawMessage({role,content,image});chat.scrollTop=chat.scrollHeight;renderHistory()}
+function imageRequest(s){return /\\b(create|generate|make|draw|render)\\s+(an?\\s+)?image\\b/i.test(s)||/^\\/image\\b/i.test(s)}
+function imagePrompt(s){return s.replace(/^\\/image\\s*/i,'').replace(/^\\s*(create|generate|make|draw|render)\\s+(an?\\s+)?image\\s*(of|showing)?\\s*/i,'').trim()||s}
+async function send(){const text=box.value.trim();if(!text)return;box.value='';if(imageRequest(text)){await generateImage(imagePrompt(text),text);return}add('user',text);const thinking={role:'assistant',content:'Thinking…'};drawMessage(thinking);chat.lastElementChild.querySelector('.msg').classList.add('thinking');try{const msgs=current().messages.filter(m=>!m.image&&m.content!=='Thinking…').slice(-20).map(m=>({role:m.role,content:m.content}));const r=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({messages:msgs})});const j=await r.json();chat.removeChild(chat.lastElementChild);add('assistant',j.reply||j.error||'Something went wrong.')}catch(e){chat.removeChild(chat.lastElementChild);add('assistant','Connection error: '+e.message)}}
+async function generateImage(prompt,shown){add('user',shown);add('assistant','Creating your image…');const row=chat.lastElementChild;row.querySelector('.msg').classList.add('thinking');try{const r=await fetch('/api/image',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({prompt})});const j=await r.json();chat.removeChild(row);if(j.image)add('assistant','',j.image);else add('assistant',j.error||'Image generation failed.')}catch(e){chat.removeChild(row);add('assistant','Image error: '+e.message)}}
+async function regenerate(){const s=current();const last=s.messages.filter(m=>m.role==='user'&&!m.image).pop();if(!last)return;s.messages=s.messages.slice(0,-1);save();renderChat();box.value=last.content;await send()}
+function voice(){const R=window.SpeechRecognition||window.webkitSpeechRecognition;if(!R){alert('Voice input is not supported in this browser.');return}const rec=new R();rec.lang='en-IN';rec.interimResults=false;const b=document.getElementById('mic');b.textContent='⏺ Listening…';rec.onresult=e=>box.value=e.results[0][0].transcript;rec.onend=()=>b.textContent='🎙 Voice';rec.onerror=()=>b.textContent='🎙 Voice';rec.start()}
+function speakText(t){if('speechSynthesis'in window){speechSynthesis.cancel();speechSynthesis.speak(new SpeechSynthesisUtterance(t))}}
+function toggleTheme(){theme=theme==='dark'?'light':'dark';localStorage.setItem('sambot_theme',theme);document.body.classList.toggle('light',theme==='light')}
+function toggleSidebar(){sidebar.classList.toggle('open')}
+function openSettings(){document.getElementById('settings').classList.add('show');document.getElementById('displayName').value=localStorage.getItem('sambot_name')||'Sambot User'}
+function closeSettings(){document.getElementById('settings').classList.remove('show')}
+function saveSettings(){localStorage.setItem('sambot_name',document.getElementById('displayName').value||'Sambot User');closeSettings()}
+function exportChats(){const blob=new Blob([JSON.stringify(sessions,null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='sambot-chats.json';a.click();URL.revokeObjectURL(a.href)}
 box.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send()}})
-if(history.length)restore();
+ensure();renderHistory();renderChat();
 </script>
-</body>
-</html>"""
+</body></html>"""
 
 @app.get("/", response_class=HTMLResponse)
 def home():
