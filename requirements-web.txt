@@ -3,3 +3,8 @@ uvicorn[standard]
 groq
 pydantic>=2
 requests
+python-multipart
+beautifulsoup4
+pypdf
+python-docx
+openpyxl
