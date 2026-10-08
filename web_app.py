@@ -75,6 +75,11 @@ button,input,textarea{font:inherit}.app{height:100vh;display:flex}.sidebar{width
 <input id="authName" placeholder="Name" style="display:none;width:100%;padding:11px;margin-bottom:8px;background:#0e1014;color:#fff;border:1px solid #30343d;border-radius:8px">
 <input id="authEmail" type="email" placeholder="Email" style="width:100%;padding:11px;margin-bottom:8px;background:#0e1014;color:#fff;border:1px solid #30343d;border-radius:8px">
 <input id="authPassword" type="password" placeholder="Password (6+ characters)" style="width:100%;padding:11px;background:#0e1014;color:#fff;border:1px solid #30343d;border-radius:8px">
+<div id="otpBox" style="display:none;margin-top:10px">
+<input id="authOtp" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="6-digit OTP" style="width:100%;padding:11px;background:#0e1014;color:#fff;border:1px solid #30343d;border-radius:8px;text-align:center;letter-spacing:5px">
+<button id="otpVerify" class="toolbtn send" style="width:100%;margin-top:8px" onclick="verifySignupOtp()">Verify OTP</button>
+<button class="toolbtn" style="width:100%;margin-top:6px" onclick="resendSignupOtp()">Resend OTP</button>
+</div>
 <button id="authSubmit" class="toolbtn send" style="width:100%;margin-top:10px" onclick="submitAuth()">Login</button>
 <div id="authMsg" style="font-size:12px;margin-top:9px;color:#ff8b8b"></div>
 </div></div>
@@ -119,11 +124,66 @@ button,input,textarea{font:inherit}.app{height:100vh;display:flex}.sidebar{width
 const SUPABASE_URL="__SUPABASE_URL__";
 const SUPABASE_PUBLISHABLE_KEY="__SUPABASE_PUBLISHABLE_KEY__";
 const supabaseClient=(SUPABASE_URL&&SUPABASE_PUBLISHABLE_KEY)?window.supabase.createClient(SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY):null;
-</script><script>let signupMode=false;
-function authMode(signup){signupMode=signup;document.getElementById('authName').style.display=signup?'block':'none';document.getElementById('authSubmit').textContent=signup?'Create account':'Login';document.getElementById('authMsg').textContent=''}
-async function submitAuth(){const name=document.getElementById('authName').value.trim(),email=document.getElementById('authEmail').value.trim(),password=document.getElementById('authPassword').value,msg=document.getElementById('authMsg');if(!supabaseClient){msg.textContent='Supabase is not configured yet. Add SUPABASE_URL and SUPABASE_PUBLISHABLE_KEY in Render.';return}if(!email||!password||(signupMode&&!name)){msg.textContent='Please fill all fields.';return}msg.textContent='Please wait…';const result=signupMode?await supabaseClient.auth.signUp({email,password,options:{data:{display_name:name},emailRedirectTo:window.location.origin}}):await supabaseClient.auth.signInWithPassword({email,password});if(result.error){msg.textContent=result.error.message;return}if(signupMode&&!result.data.session){msg.style.color='#9fe3a1';msg.textContent='Account created! Check your email to confirm, then log in.';return}if(result.data.user){document.getElementById('auth').style.display='none';setUser(result.data.user)}}
+</script><script>let signupMode=false,otpPending=false;
+function authMode(signup){
+signupMode=signup;otpPending=false;
+document.getElementById('authName').style.display=signup?'block':'none';
+document.getElementById('authPassword').style.display='block';
+document.getElementById('otpBox').style.display='none';
+document.getElementById('authSubmit').style.display='block';
+document.getElementById('authSubmit').textContent=signup?'Create account':'Login';
+document.getElementById('authMsg').textContent='';
+document.getElementById('authOtp').value='';
+}
+async function submitAuth(){
+const name=document.getElementById('authName').value.trim(),email=document.getElementById('authEmail').value.trim(),password=document.getElementById('authPassword').value,msg=document.getElementById('authMsg');
+if(!supabaseClient){msg.textContent='Supabase is not configured yet. Add SUPABASE_URL and SUPABASE_PUBLISHABLE_KEY in Render.';return}
+if(!email||!password||(signupMode&&!name)){msg.textContent='Please fill all fields.';return}
+msg.style.color='#ff8b8b';msg.textContent='Please wait…';
+const result=signupMode
+?await supabaseClient.auth.signUp({email,password,options:{data:{display_name:name}}})
+:await supabaseClient.auth.signInWithPassword({email,password});
+if(result.error){msg.textContent=result.error.message;return}
+if(signupMode){
+if(result.data.session&&result.data.user){document.getElementById('auth').style.display='none';setUser(result.data.user);return}
+otpPending=true;
+document.getElementById('authOtp').value='';
+document.getElementById('otpBox').style.display='block';
+document.getElementById('authSubmit').style.display='none';
+document.getElementById('authMsg').style.color='#9fe3a1';
+document.getElementById('authMsg').textContent='OTP sent to your email. Enter the 6-digit code below.';
+return;
+}
+if(result.data.user){document.getElementById('auth').style.display='none';setUser(result.data.user)}
+}
+async function verifySignupOtp(){
+if(!otpPending)return;
+const email=document.getElementById('authEmail').value.trim(),token=document.getElementById('authOtp').value.trim(),msg=document.getElementById('authMsg');
+if(!/^\d{6}$/.test(token)){msg.style.color='#ff8b8b';msg.textContent='Enter the 6-digit OTP from your email.';return}
+msg.style.color='#aaa';msg.textContent='Verifying OTP…';
+const {data,error}=await supabaseClient.auth.verifyOtp({email,token,type:'email'});
+if(error){msg.style.color='#ff8b8b';msg.textContent=error.message;return}
+if(data.user){otpPending=false;document.getElementById('auth').style.display='none';setUser(data.user)}
+}
+async function resendSignupOtp(){
+const email=document.getElementById('authEmail').value.trim(),msg=document.getElementById('authMsg');
+if(!email){msg.textContent='Enter your email first.';return}
+msg.style.color='#aaa';msg.textContent='Sending a new OTP…';
+const {error}=await supabaseClient.auth.signInWithOtp({email,options:{shouldCreateUser:false}});
+if(error){msg.style.color='#ff8b8b';msg.textContent=error.message;return}
+msg.style.color='#9fe3a1';msg.textContent='A new OTP has been sent.';
+}
 function setUser(u){const name=u.user_metadata?.display_name||u.email?.split('@')[0]||'Sambot User';document.getElementById('profileName').textContent=name;document.getElementById('profileEmail').textContent=u.email||'';document.getElementById('avatar').textContent=name.charAt(0).toUpperCase()}
-async function checkAuth(){if(!supabaseClient){document.getElementById('auth').style.display='flex';document.getElementById('authMsg').textContent='Supabase is not configured. Add the two Render variables.';return}const hash=window.location.hash||'';if(hash.includes('error_code=')||hash.includes('error=')){const p=new URLSearchParams(hash.replace(/^#/,'').replace(/&/g,'&'));const desc=p.get('error_description');if(desc){document.getElementById('authMsg').textContent=decodeURIComponent(desc.replace(/\+/g,' '));}window.history.replaceState({},document.title,window.location.pathname+window.location.search);return}const {data}=await supabaseClient.auth.getSession();if(data.session){document.getElementById('auth').style.display='none';setUser(data.session.user);if(window.location.hash)window.history.replaceState({},document.title,window.location.pathname+window.location.search)}else document.getElementById('auth').style.display='flex';supabaseClient.auth.onAuthStateChange((_event,session)=>{if(session){document.getElementById('auth').style.display='none';setUser(session.user);if(window.location.hash)window.history.replaceState({},document.title,window.location.pathname+window.location.search)}else document.getElementById('auth').style.display='flex'})}
+async function checkAuth(){
+if(!supabaseClient){document.getElementById('auth').style.display='flex';document.getElementById('authMsg').textContent='Supabase is not configured. Add the two Render variables.';return}
+const {data}=await supabaseClient.auth.getSession();
+if(data.session){document.getElementById('auth').style.display='none';setUser(data.session.user)}
+else document.getElementById('auth').style.display='flex';
+supabaseClient.auth.onAuthStateChange((_event,session)=>{
+if(session){document.getElementById('auth').style.display='none';setUser(session.user)}
+else document.getElementById('auth').style.display='flex'
+})
+}
 async function logout(){if(supabaseClient)await supabaseClient.auth.signOut();location.reload()}
 
 const box=document.getElementById('box'),chat=document.getElementById('chat'),historyEl=document.getElementById('history'),sidebar=document.getElementById('sidebar');
