@@ -1,11 +1,49 @@
 import os
 import requests
+import sqlite3
+import secrets
+import hashlib
+from fastapi import Request
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 from groq import Groq
 
 app = FastAPI(title="SAMBOT X")
+
+DB_PATH=os.getenv("SAMBOT_DB_PATH","sambot.db")
+SESSIONS={}
+
+def db():
+    con=sqlite3.connect(DB_PATH)
+    con.row_factory=sqlite3.Row
+    con.execute("CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL,email TEXT UNIQUE NOT NULL,password_hash TEXT NOT NULL)")
+    con.commit()
+    return con
+
+def hash_password(password):
+    salt=secrets.token_bytes(16)
+    digest=hashlib.pbkdf2_hmac("sha256",password.encode(),salt,210000)
+    return salt.hex()+":"+digest.hex()
+
+def verify_password(password,stored):
+    try:
+        salt,digest=stored.split(":")
+        check=hashlib.pbkdf2_hmac("sha256",password.encode(),bytes.fromhex(salt),210000).hex()
+        return secrets.compare_digest(check,digest)
+    except Exception:
+        return False
+
+def current_user(request):
+    token=request.cookies.get("sambot_session")
+    uid=SESSIONS.get(token)
+    if not uid:
+        return None
+    con=db()
+    row=con.execute("SELECT id,name,email FROM users WHERE id=?",(uid,)).fetchone()
+    con.close()
+    return dict(row) if row else None
+
 
 class ChatMessage(BaseModel):
     role: str
@@ -30,6 +68,16 @@ button,input,textarea{font:inherit}.app{height:100vh;display:flex}.sidebar{width
 </style>
 </head>
 <body>
+<div id="auth" style="position:fixed;inset:0;background:#08090c;display:flex;align-items:center;justify-content:center;z-index:100">
+<div style="width:min(410px,92%);background:#15181e;border:1px solid #343842;border-radius:18px;padding:25px">
+<div style="font-size:25px;font-weight:800">✨ SAMBOT X</div><div style="opacity:.5;font-size:12px;margin:5px 0 20px">Your personal AI assistant</div>
+<div style="display:flex;gap:6px;margin-bottom:12px"><button class="toolbtn" onclick="authMode(false)">Login</button><button class="toolbtn" onclick="authMode(true)">Sign up</button></div>
+<input id="authName" placeholder="Name" style="display:none;width:100%;padding:11px;margin-bottom:8px;background:#0e1014;color:#fff;border:1px solid #30343d;border-radius:8px">
+<input id="authEmail" type="email" placeholder="Email" style="width:100%;padding:11px;margin-bottom:8px;background:#0e1014;color:#fff;border:1px solid #30343d;border-radius:8px">
+<input id="authPassword" type="password" placeholder="Password (6+ characters)" style="width:100%;padding:11px;background:#0e1014;color:#fff;border:1px solid #30343d;border-radius:8px">
+<button id="authSubmit" class="toolbtn send" style="width:100%;margin-top:10px" onclick="submitAuth()">Login</button>
+<div id="authMsg" style="font-size:12px;margin-top:9px;color:#ff8b8b"></div>
+</div></div>
 <div class="app">
 <aside class="sidebar" id="sidebar">
 <div class="brand">✨ SAMBOT X <small>AI ASSISTANT</small></div>
@@ -66,7 +114,13 @@ button,input,textarea{font:inherit}.app{height:100vh;display:flex}.sidebar{width
 <button class="toolbtn" onclick="closeSettings()">Close</button>
 </div></div>
 
-<script>
+<script>let signupMode=false;
+function authMode(signup){signupMode=signup;document.getElementById('authName').style.display=signup?'block':'none';document.getElementById('authSubmit').textContent=signup?'Create account':'Login';document.getElementById('authMsg').textContent=''}
+async function submitAuth(){const name=document.getElementById('authName').value.trim(),email=document.getElementById('authEmail').value.trim(),password=document.getElementById('authPassword').value,msg=document.getElementById('authMsg');if(!email||!password||(signupMode&&!name)){msg.textContent='Please fill all fields.';return}const r=await fetch(signupMode?'/api/signup':'/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(signupMode?{name,email,password}:{email,password})});const j=await r.json();if(j.ok){document.getElementById('auth').style.display='none';setUser(j.user)}else msg.textContent=j.error||'Authentication failed.'}
+function setUser(u){document.getElementById('profileName').textContent=u.name;document.getElementById('profileEmail').textContent=u.email;document.getElementById('avatar').textContent=(u.name||'S').charAt(0).toUpperCase()}
+async function checkAuth(){const r=await fetch('/api/me');const j=await r.json();if(j.user){document.getElementById('auth').style.display='none';setUser(j.user)}else document.getElementById('auth').style.display='flex'}
+async function logout(){await fetch('/api/logout',{method:'POST'});location.reload()}
+
 const box=document.getElementById('box'),chat=document.getElementById('chat'),historyEl=document.getElementById('history'),sidebar=document.getElementById('sidebar');
 let sessions=[];try{sessions=JSON.parse(localStorage.getItem('sambot_sessions')||'[]');if(!Array.isArray(sessions))sessions=[]}catch(e){localStorage.removeItem('sambot_sessions');sessions=[]}let currentId=localStorage.getItem('sambot_current')||'';
 let theme=localStorage.getItem('sambot_theme')||'dark';
@@ -96,9 +150,58 @@ function closeSettings(){document.getElementById('settings').classList.remove('s
 function saveSettings(){localStorage.setItem('sambot_name',document.getElementById('displayName').value||'Sambot User');closeSettings()}
 function exportChats(){const blob=new Blob([JSON.stringify(sessions,null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='sambot-chats.json';a.click();URL.revokeObjectURL(a.href)}
 box.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send()}})
-window.newChat=newChat;window.send=send;window.toggleTheme=toggleTheme;window.openSettings=openSettings;window.closeSettings=closeSettings;window.saveSettings=saveSettings;window.exportChats=exportChats;window.toggleSidebar=toggleSidebar;window.voice=voice;window.regenerate=regenerate;window.chatMenu=chatMenu;window.loadChat=loadChat;ensure();renderHistory();renderChat();
+window.newChat=newChat;window.send=send;window.toggleTheme=toggleTheme;window.openSettings=openSettings;window.closeSettings=closeSettings;window.saveSettings=saveSettings;window.exportChats=exportChats;window.toggleSidebar=toggleSidebar;window.voice=voice;window.regenerate=regenerate;window.chatMenu=chatMenu;window.loadChat=loadChat;ensure();renderHistory();renderChat();authMode(false);checkAuth();
 </script>
 </body></html>"""
+
+@app.post("/api/signup")
+def signup(data: dict):
+    name=str(data.get("name","")).strip()
+    email=str(data.get("email","")).strip().lower()
+    password=str(data.get("password",""))
+    if not name or "@" not in email or len(password)<6:
+        return {"error":"Enter a name, valid email, and password of at least 6 characters."}
+    con=db()
+    try:
+        cur=con.execute("INSERT INTO users(name,email,password_hash) VALUES(?,?,?)",(name,email,hash_password(password)))
+        con.commit()
+        uid=cur.lastrowid
+    except sqlite3.IntegrityError:
+        con.close()
+        return {"error":"An account with that email already exists."}
+    con.close()
+    token=secrets.token_urlsafe(32)
+    SESSIONS[token]=uid
+    out=JSONResponse({"ok":True,"user":{"id":uid,"name":name,"email":email}})
+    out.set_cookie("sambot_session",token,httponly=True,samesite="lax",secure=True,max_age=2592000)
+    return out
+
+@app.post("/api/login")
+def login(data: dict):
+    email=str(data.get("email","")).strip().lower()
+    password=str(data.get("password",""))
+    con=db()
+    user=con.execute("SELECT * FROM users WHERE email=?",(email,)).fetchone()
+    con.close()
+    if not user or not verify_password(password,user["password_hash"]):
+        return {"error":"Incorrect email or password."}
+    token=secrets.token_urlsafe(32)
+    SESSIONS[token]=user["id"]
+    out=JSONResponse({"ok":True,"user":{"id":user["id"],"name":user["name"],"email":user["email"]}})
+    out.set_cookie("sambot_session",token,httponly=True,samesite="lax",secure=True,max_age=2592000)
+    return out
+
+@app.get("/api/me")
+def me(request: Request):
+    return {"user":current_user(request)}
+
+@app.post("/api/logout")
+def logout(request: Request):
+    token=request.cookies.get("sambot_session")
+    SESSIONS.pop(token,None)
+    out=JSONResponse({"ok":True})
+    out.delete_cookie("sambot_session")
+    return out
 
 @app.get("/", response_class=HTMLResponse)
 def home():
