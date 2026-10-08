@@ -98,6 +98,19 @@ function closeSettings(){document.getElementById('settings').classList.remove('s
 function saveSettings(){localStorage.setItem('sambot_name',document.getElementById('displayName').value||'Sambot User');closeSettings()}
 function exportChats(){const blob=new Blob([JSON.stringify(sessions,null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='sambot-chats.json';a.click();URL.revokeObjectURL(a.href)}
 document.getElementById("fileInput").addEventListener("change",e=>{attachedFiles=Array.from(e.target.files||[]);document.getElementById("attachments").textContent=attachedFiles.length?"📎 "+attachedFiles.map(f=>f.name).join(", "):""});
+box.addEventListener("paste",e=>{
+  const items=Array.from(e.clipboardData?.items||[]);
+  const imageItem=items.find(i=>i.type.startsWith("image/"));
+  if(!imageItem)return;
+  const file=imageItem.getAsFile();
+  if(file){
+    e.preventDefault();
+    const ext=file.type.split("/")[1]||"png";
+    const named=new File([file],"pasted-image."+ext,{type:file.type});
+    attachedFiles.push(named);
+    document.getElementById("attachments").textContent="📎 "+attachedFiles.map(f=>f.name).join(", ");
+  }
+});
 function toggleWeb(){webEnabled=!webEnabled;document.getElementById("webBtn").style.background=webEnabled?"#2c3039":""}
 function toggleMemory(){const old=localStorage.getItem("sambot_memory")||"";const value=prompt("What should Sambot remember? (stored only in this browser)",old);if(value!==null)localStorage.setItem("sambot_memory",value)}
 async function uploadFiles(){if(!attachedFiles.length)return "";const fd=new FormData();attachedFiles.forEach(f=>fd.append("files",f));const r=await fetch("/api/files",{method:"POST",body:fd});const j=await r.json();if(!r.ok)throw new Error(j.error||"File upload failed");attachedFiles=[];document.getElementById("fileInput").value="";document.getElementById("attachments").textContent="";return j.text||""}
