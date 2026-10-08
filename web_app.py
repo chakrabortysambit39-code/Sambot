@@ -3,8 +3,6 @@ import requests
 import sqlite3
 import secrets
 import hashlib
-import smtplib
-from email.message import EmailMessage
 from datetime import datetime, timedelta, timezone
 from fastapi import Request
 from fastapi import FastAPI
@@ -230,25 +228,35 @@ window.authMode=authMode;window.submitAuth=submitAuth;window.logout=logout;windo
 </script>
 </body></html>"""
 
-def smtp_send_otp(email, otp):
-    sender=os.getenv("GMAIL_SMTP_USER","").strip()
-    app_password=os.getenv("GMAIL_SMTP_APP_PASSWORD","").replace(" ","").strip()
-    if not sender or not app_password:
-        raise RuntimeError("Gmail SMTP is not configured in Render. Add GMAIL_SMTP_USER and GMAIL_SMTP_APP_PASSWORD.")
-    msg=EmailMessage()
-    msg["Subject"]="Your SAMBOT X verification code"
-    msg["From"]=f"SAMBOT X <{sender}>"
-    msg["To"]=email
-    msg.set_content(f"""Your SAMBOT X verification code is: {otp}
+def resend_send_otp(email, otp):
+    api_key=os.getenv("RESEND_API_KEY","").strip()
+    if not api_key:
+        raise RuntimeError("Resend is not configured in Render. Add RESEND_API_KEY.")
+    sender=os.getenv("RESEND_FROM_EMAIL","onboarding@resend.dev").strip()
+    sender_name=os.getenv("RESEND_FROM_NAME","SAMBOT X").strip()
+    payload={
+        "from":f"{sender_name} <{sender}>",
+        "to":[email],
+        "subject":"Your SAMBOT X verification code",
+        "text":f"""Your SAMBOT X verification code is: {otp}
 
 This code expires in 10 minutes.
 
 If you did not create a SAMBOT X account, you can ignore this email.
-""")
-    with smtplib.SMTP("smtp.gmail.com",587,timeout=30) as server:
-        server.starttls()
-        server.login(sender,app_password)
-        server.send_message(msg)
+"""
+    }
+    r=requests.post(
+        "https://api.resend.com/emails",
+        headers={"Authorization":f"Bearer {api_key}","Content-Type":"application/json"},
+        json=payload,
+        timeout=30
+    )
+    if not r.ok:
+        try: detail=r.json()
+        except Exception: detail=r.text[:1000]
+        raise RuntimeError(f"Resend returned HTTP {r.status_code}: {detail}")
+    return r.json()
+
 
 def make_otp():
     return f"{secrets.randbelow(1000000):06d}"
@@ -275,7 +283,7 @@ def signup(data: dict):
     con.commit()
     con.close()
     try:
-        smtp_send_otp(email,otp)
+        resend_send_otp(email,otp)
     except Exception as e:
         con=db()
         con.execute("DELETE FROM signup_otps WHERE email=?",(email,))
@@ -380,7 +388,7 @@ def health():
         "ok": True,
         "groq_configured": bool(os.getenv("GROQ_API_KEY")),
         "cloudflare_configured": bool(os.getenv("CLOUDFLARE_ACCOUNT_ID") and os.getenv("CLOUDFLARE_API_TOKEN")),
-        "gmail_smtp_configured": bool(os.getenv("GMAIL_SMTP_USER") and os.getenv("GMAIL_SMTP_APP_PASSWORD"))
+        "resend_configured": bool(os.getenv("RESEND_API_KEY"))
     }
 
 @app.post("/api/image")
