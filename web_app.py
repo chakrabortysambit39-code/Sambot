@@ -89,7 +89,7 @@ button,input,textarea{font:inherit}.app{height:100vh;display:flex}.sidebar{width
 <button class="sidebtn" onclick="openSettings()">⚙ Settings</button>
 <button class="sidebtn" onclick="exportChats()">⇩ Export chats</button>
 <button class="sidebtn" onclick="toggleTheme()">☼ Appearance</button>
-<div class="profile"><div class="avatar">S</div><div><b>Sambot User</b><div style="font-size:10px;opacity:.4">Personal</div></div></div>
+<div class="profile"><div class="avatar" id="avatar">S</div><div><b id="profileName">Sambot User</b><div id="profileEmail" style="font-size:10px;opacity:.4">Personal</div></div><button class="menu" onclick="logout()">↪</button></div>
 </div>
 </aside>
 <section class="main">
@@ -114,12 +114,17 @@ button,input,textarea{font:inherit}.app{height:100vh;display:flex}.sidebar{width
 <button class="toolbtn" onclick="closeSettings()">Close</button>
 </div></div>
 
-<script>let signupMode=false;
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+const SUPABASE_URL="__SUPABASE_URL__";
+const SUPABASE_PUBLISHABLE_KEY="__SUPABASE_PUBLISHABLE_KEY__";
+const supabaseClient=(SUPABASE_URL&&SUPABASE_PUBLISHABLE_KEY)?window.supabase.createClient(SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY):null;
+</script><script>let signupMode=false;
 function authMode(signup){signupMode=signup;document.getElementById('authName').style.display=signup?'block':'none';document.getElementById('authSubmit').textContent=signup?'Create account':'Login';document.getElementById('authMsg').textContent=''}
-async function submitAuth(){const name=document.getElementById('authName').value.trim(),email=document.getElementById('authEmail').value.trim(),password=document.getElementById('authPassword').value,msg=document.getElementById('authMsg');if(!email||!password||(signupMode&&!name)){msg.textContent='Please fill all fields.';return}const r=await fetch(signupMode?'/api/signup':'/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(signupMode?{name,email,password}:{email,password})});const j=await r.json();if(j.ok){document.getElementById('auth').style.display='none';setUser(j.user)}else msg.textContent=j.error||'Authentication failed.'}
-function setUser(u){document.getElementById('profileName').textContent=u.name;document.getElementById('profileEmail').textContent=u.email;document.getElementById('avatar').textContent=(u.name||'S').charAt(0).toUpperCase()}
-async function checkAuth(){const r=await fetch('/api/me');const j=await r.json();if(j.user){document.getElementById('auth').style.display='none';setUser(j.user)}else document.getElementById('auth').style.display='flex'}
-async function logout(){await fetch('/api/logout',{method:'POST'});location.reload()}
+async function submitAuth(){const name=document.getElementById('authName').value.trim(),email=document.getElementById('authEmail').value.trim(),password=document.getElementById('authPassword').value,msg=document.getElementById('authMsg');if(!supabaseClient){msg.textContent='Supabase is not configured yet. Add SUPABASE_URL and SUPABASE_PUBLISHABLE_KEY in Render.';return}if(!email||!password||(signupMode&&!name)){msg.textContent='Please fill all fields.';return}msg.textContent='Please wait…';const result=signupMode?await supabaseClient.auth.signUp({email,password,options:{data:{display_name:name}}}):await supabaseClient.auth.signInWithPassword({email,password});if(result.error){msg.textContent=result.error.message;return}if(signupMode&&!result.data.session){msg.style.color='#9fe3a1';msg.textContent='Account created! Check your email to confirm, then log in.';return}if(result.data.user){document.getElementById('auth').style.display='none';setUser(result.data.user)}}
+function setUser(u){const name=u.user_metadata?.display_name||u.email?.split('@')[0]||'Sambot User';document.getElementById('profileName').textContent=name;document.getElementById('profileEmail').textContent=u.email||'';document.getElementById('avatar').textContent=name.charAt(0).toUpperCase()}
+async function checkAuth(){if(!supabaseClient){document.getElementById('auth').style.display='flex';document.getElementById('authMsg').textContent='Supabase is not configured. Add the two Render variables.';return}const {data}=await supabaseClient.auth.getSession();if(data.session){document.getElementById('auth').style.display='none';setUser(data.session.user)}else document.getElementById('auth').style.display='flex';supabaseClient.auth.onAuthStateChange((_event,session)=>{if(session){document.getElementById('auth').style.display='none';setUser(session.user)}else document.getElementById('auth').style.display='flex'})}
+async function logout(){if(supabaseClient)await supabaseClient.auth.signOut();location.reload()}
 
 const box=document.getElementById('box'),chat=document.getElementById('chat'),historyEl=document.getElementById('history'),sidebar=document.getElementById('sidebar');
 let sessions=[];try{sessions=JSON.parse(localStorage.getItem('sambot_sessions')||'[]');if(!Array.isArray(sessions))sessions=[]}catch(e){localStorage.removeItem('sambot_sessions');sessions=[]}let currentId=localStorage.getItem('sambot_current')||'';
@@ -150,9 +155,12 @@ function closeSettings(){document.getElementById('settings').classList.remove('s
 function saveSettings(){localStorage.setItem('sambot_name',document.getElementById('displayName').value||'Sambot User');closeSettings()}
 function exportChats(){const blob=new Blob([JSON.stringify(sessions,null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='sambot-chats.json';a.click();URL.revokeObjectURL(a.href)}
 box.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send()}})
-window.newChat=newChat;window.send=send;window.toggleTheme=toggleTheme;window.openSettings=openSettings;window.closeSettings=closeSettings;window.saveSettings=saveSettings;window.exportChats=exportChats;window.toggleSidebar=toggleSidebar;window.voice=voice;window.regenerate=regenerate;window.chatMenu=chatMenu;window.loadChat=loadChat;ensure();renderHistory();renderChat();authMode(false);checkAuth();
+window.authMode=authMode;window.submitAuth=submitAuth;window.logout=logout;window.newChat=newChat;window.send=send;window.toggleTheme=toggleTheme;window.openSettings=openSettings;window.closeSettings=closeSettings;window.saveSettings=saveSettings;window.exportChats=exportChats;window.toggleSidebar=toggleSidebar;window.voice=voice;window.regenerate=regenerate;window.chatMenu=chatMenu;window.loadChat=loadChat;ensure();renderHistory();renderChat();authMode(false);checkAuth();
 </script>
 </body></html>"""
+
+# Inject only the public Supabase browser configuration; never expose a secret/service key.
+HTML=HTML.replace("__SUPABASE_URL__", os.getenv("SUPABASE_URL","")).replace("__SUPABASE_PUBLISHABLE_KEY__", os.getenv("SUPABASE_PUBLISHABLE_KEY",""))
 
 @app.post("/api/signup")
 def signup(data: dict):
