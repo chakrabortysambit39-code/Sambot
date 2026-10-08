@@ -1,51 +1,12 @@
 import os
 import requests
-import sqlite3
-import secrets
-import hashlib
-from datetime import datetime, timedelta, timezone
-from fastapi import Request
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi import UploadFile, File
 from pydantic import BaseModel
 from groq import Groq
 
 app = FastAPI(title="SAMBOT X")
-
-DB_PATH=os.getenv("SAMBOT_DB_PATH","sambot.db")
-SESSIONS={}
-
-def db():
-    con=sqlite3.connect(DB_PATH)
-    con.row_factory=sqlite3.Row
-    con.execute("CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL,email TEXT UNIQUE NOT NULL,password_hash TEXT NOT NULL)")
-    con.execute("CREATE TABLE IF NOT EXISTS signup_otps (email TEXT PRIMARY KEY,name TEXT NOT NULL,password_hash TEXT NOT NULL,otp_hash TEXT NOT NULL,expires_at TEXT NOT NULL)")
-    con.commit()
-    return con
-
-def hash_password(password):
-    salt=secrets.token_bytes(16)
-    digest=hashlib.pbkdf2_hmac("sha256",password.encode(),salt,210000)
-    return salt.hex()+":"+digest.hex()
-
-def verify_password(password,stored):
-    try:
-        salt,digest=stored.split(":")
-        check=hashlib.pbkdf2_hmac("sha256",password.encode(),bytes.fromhex(salt),210000).hex()
-        return secrets.compare_digest(check,digest)
-    except Exception:
-        return False
-
-def current_user(request):
-    token=request.cookies.get("sambot_session")
-    uid=SESSIONS.get(token)
-    if not uid:
-        return None
-    con=db()
-    row=con.execute("SELECT id,name,email FROM users WHERE id=?",(uid,)).fetchone()
-    con.close()
-    return dict(row) if row else None
-
 
 class ChatMessage(BaseModel):
     role: str
@@ -53,6 +14,7 @@ class ChatMessage(BaseModel):
 
 class ChatRequest(BaseModel):
     messages: list[ChatMessage]
+    web_search: bool = False
 
 class ImageRequest(BaseModel):
     prompt: str
@@ -70,21 +32,6 @@ button,input,textarea{font:inherit}.app{height:100vh;display:flex}.sidebar{width
 </style>
 </head>
 <body>
-<div id="auth" style="position:fixed;inset:0;background:#08090c;display:flex;align-items:center;justify-content:center;z-index:100">
-<div style="width:min(410px,92%);background:#15181e;border:1px solid #343842;border-radius:18px;padding:25px">
-<div style="font-size:25px;font-weight:800">✨ SAMBOT X</div><div style="opacity:.5;font-size:12px;margin:5px 0 20px">Your personal AI assistant</div>
-<div style="display:flex;gap:6px;margin-bottom:12px"><button class="toolbtn" onclick="authMode(false)">Login</button><button class="toolbtn" onclick="authMode(true)">Sign up</button></div>
-<input id="authName" placeholder="Name" style="display:none;width:100%;padding:11px;margin-bottom:8px;background:#0e1014;color:#fff;border:1px solid #30343d;border-radius:8px">
-<input id="authEmail" type="email" placeholder="Email" style="width:100%;padding:11px;margin-bottom:8px;background:#0e1014;color:#fff;border:1px solid #30343d;border-radius:8px">
-<input id="authPassword" type="password" placeholder="Password (6+ characters)" style="width:100%;padding:11px;background:#0e1014;color:#fff;border:1px solid #30343d;border-radius:8px">
-<div id="otpBox" style="display:none;margin-top:10px">
-<input id="authOtp" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="6-digit OTP" style="width:100%;padding:11px;background:#0e1014;color:#fff;border:1px solid #30343d;border-radius:8px;text-align:center;letter-spacing:5px">
-<button id="otpVerify" class="toolbtn send" style="width:100%;margin-top:8px" onclick="verifySignupOtp()">Verify OTP</button>
-<button class="toolbtn" style="width:100%;margin-top:6px" onclick="resendSignupOtp()">Resend OTP</button>
-</div>
-<button id="authSubmit" class="toolbtn send" style="width:100%;margin-top:10px" onclick="submitAuth()">Login</button>
-<div id="authMsg" style="font-size:12px;margin-top:9px;color:#ff8b8b"></div>
-</div></div>
 <div class="app">
 <aside class="sidebar" id="sidebar">
 <div class="brand">✨ SAMBOT X <small>AI ASSISTANT</small></div>
@@ -94,9 +41,9 @@ button,input,textarea{font:inherit}.app{height:100vh;display:flex}.sidebar{width
 <div class="history" id="history"></div>
 <div class="sidebottom">
 <button class="sidebtn" onclick="openSettings()">⚙ Settings</button>
-<button class="sidebtn" onclick="exportChats()">⇩ Export chats</button>
+<button class="sidebtn" onclick="exportChats()">⇩ Export chats</button><button class="sidebtn" onclick="toggleMemory()">🧠 Memory</button>
 <button class="sidebtn" onclick="toggleTheme()">☼ Appearance</button>
-<div class="profile"><div class="avatar" id="avatar">S</div><div><b id="profileName">Sambot User</b><div id="profileEmail" style="font-size:10px;opacity:.4">Personal</div></div><button class="menu" onclick="logout()">↪</button></div>
+<div class="profile"><div class="avatar">S</div><div><b>Sambot User</b><div style="font-size:10px;opacity:.4">Local session</div></div></div></div>
 </div>
 </aside>
 <section class="main">
@@ -107,8 +54,8 @@ button,input,textarea{font:inherit}.app{height:100vh;display:flex}.sidebar{width
 <section class="chat" id="chat"></section>
 <div class="composer"><div class="compose">
 <textarea id="box" rows="2" placeholder="Message Sambot X..."></textarea>
-<div class="controls"><div class="tools"><button class="toolbtn" id="mic" onclick="voice()">🎙 Voice</button></div><div class="tools"><button class="toolbtn send" onclick="send()">Send ➤</button></div></div>
-<div style="text-align:center;font-size:10px;opacity:.35;padding:5px">Enter to send • Shift+Enter for new line • Type “create image …” for images</div>
+<div class="controls"><div class="tools"><input id="fileInput" type="file" hidden multiple accept=".txt,.md,.csv,.json,.pdf,.docx,.xlsx,.py,.js,.html,.css"><button class="toolbtn" onclick="document.getElementById('fileInput').click()">📎 Files</button><button class="toolbtn" id="webBtn" onclick="toggleWeb()">🌐 Web</button><button class="toolbtn" id="mic" onclick="voice()">🎙 Voice</button></div><div class="tools"><button class="toolbtn send" onclick="send()">Send ➤</button></div></div>
+<div id="attachments" style="font-size:11px;opacity:.6;padding:4px"></div><div style="text-align:center;font-size:10px;opacity:.35;padding:5px">Enter to send • Shift+Enter for new line • Type “create image …” for images • Web searches current information</div>
 </div></div>
 </section>
 </div>
@@ -121,80 +68,7 @@ button,input,textarea{font:inherit}.app{height:100vh;display:flex}.sidebar{width
 <button class="toolbtn" onclick="closeSettings()">Close</button>
 </div></div>
 
-<script>let signupMode=false,otpPending=false;
-function authMode(signup){
-signupMode=signup;otpPending=false;
-document.getElementById('authName').style.display=signup?'block':'none';
-document.getElementById('authPassword').style.display='block';
-document.getElementById('otpBox').style.display='none';
-document.getElementById('authSubmit').style.display='block';
-document.getElementById('authSubmit').textContent=signup?'Create account':'Login';
-document.getElementById('authMsg').textContent='';
-document.getElementById('authOtp').value='';
-}
-async function submitAuth(){
-const name=document.getElementById('authName').value.trim();
-const email=document.getElementById('authEmail').value.trim();
-const password=document.getElementById('authPassword').value;
-const msg=document.getElementById('authMsg');
-if(!email||!password||(signupMode&&!name)){msg.textContent='Please fill all fields.';return}
-msg.style.color='#ff8b8b';msg.textContent='Please wait…';
-const endpoint=signupMode?'/api/signup':'/api/login';
-const payload=signupMode?{name,email,password}:{email,password};
-try{
-const r=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
-const j=await r.json();
-if(!r.ok||j.error){msg.textContent=j.error||'Something went wrong.';return}
-if(signupMode){
-otpPending=true;
-document.getElementById('authOtp').value='';
-document.getElementById('otpBox').style.display='block';
-document.getElementById('authSubmit').style.display='none';
-msg.style.color='#9fe3a1';
-msg.textContent='OTP sent to your email. Enter the 6-digit code below.';
-return;
-}
-if(j.user){document.getElementById('auth').style.display='none';setUser(j.user)}
-}catch(e){msg.textContent='Connection error: '+e.message}
-}
-async function verifySignupOtp(){
-if(!otpPending)return;
-const email=document.getElementById('authEmail').value.trim();
-const token=document.getElementById('authOtp').value.trim();
-const msg=document.getElementById('authMsg');
-if(!/^\d{6}$/.test(token)){msg.style.color='#ff8b8b';msg.textContent='Enter the 6-digit OTP from your email.';return}
-msg.style.color='#aaa';msg.textContent='Verifying OTP…';
-try{
-const r=await fetch('/api/verify-otp',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,otp:token})});
-const j=await r.json();
-if(!r.ok||j.error){msg.style.color='#ff8b8b';msg.textContent=j.error||'Invalid OTP.';return}
-if(j.user){otpPending=false;document.getElementById('auth').style.display='none';setUser(j.user)}
-}catch(e){msg.style.color='#ff8b8b';msg.textContent='Connection error: '+e.message}
-}
-async function resendSignupOtp(){
-const email=document.getElementById('authEmail').value.trim();
-const msg=document.getElementById('authMsg');
-if(!email){msg.textContent='Enter your email first.';return}
-msg.style.color='#aaa';msg.textContent='Sending a new OTP…';
-try{
-const r=await fetch('/api/resend-otp',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email})});
-const j=await r.json();
-if(!r.ok||j.error){msg.style.color='#ff8b8b';msg.textContent=j.error||'Could not resend OTP.';return}
-msg.style.color='#9fe3a1';msg.textContent='A new OTP has been sent.';
-}catch(e){msg.style.color='#ff8b8b';msg.textContent='Connection error: '+e.message}
-}
-function setUser(u){const name=u.name||u.email?.split('@')[0]||'Sambot User';document.getElementById('profileName').textContent=name;document.getElementById('profileEmail').textContent=u.email||'';document.getElementById('avatar').textContent=name.charAt(0).toUpperCase()}
-async function checkAuth(){
-try{
-const r=await fetch('/api/me');
-const j=await r.json();
-if(j.user){document.getElementById('auth').style.display='none';setUser(j.user)}
-else document.getElementById('auth').style.display='flex';
-}catch(e){document.getElementById('auth').style.display='flex'}
-}
-async function logout(){await fetch('/api/logout',{method:'POST'});location.reload()}
-
-
+<script>let webEnabled=false,attachedFiles=[];
 const box=document.getElementById('box'),chat=document.getElementById('chat'),historyEl=document.getElementById('history'),sidebar=document.getElementById('sidebar');
 let sessions=[];try{sessions=JSON.parse(localStorage.getItem('sambot_sessions')||'[]');if(!Array.isArray(sessions))sessions=[]}catch(e){localStorage.removeItem('sambot_sessions');sessions=[]}let currentId=localStorage.getItem('sambot_current')||'';
 let theme=localStorage.getItem('sambot_theme')||'dark';
@@ -212,7 +86,7 @@ function chatMenu(id){const s=sessions.find(x=>x.id===id);if(!s)return;const act
 function add(role,content,image){const s=current();s.messages.push({role,content,image});if(role==='user'&&s.title==='New chat')s.title=content.slice(0,36);save();drawMessage({role,content,image});chat.scrollTop=chat.scrollHeight;renderHistory()}
 function imageRequest(s){return /\b(create|generate|make|draw|render)\s+(an?\s+)?image\b/i.test(s)||/^\/image\b/i.test(s)}
 function imagePrompt(s){return s.replace(/^\/image\s*/i,'').replace(/^\s*(create|generate|make|draw|render)\s+(an?\s+)?image\s*(of|showing)?\s*/i,'').trim()||s}
-async function send(){const text=box.value.trim();if(!text)return;box.value='';if(imageRequest(text)){await generateImage(imagePrompt(text),text);return}add('user',text);const thinking={role:'assistant',content:'Thinking…'};drawMessage(thinking);chat.lastElementChild.querySelector('.msg').classList.add('thinking');try{const msgs=current().messages.filter(m=>!m.image&&m.content!=='Thinking…').slice(-20).map(m=>({role:m.role,content:m.content}));const r=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({messages:msgs})});const j=await r.json();chat.removeChild(chat.lastElementChild);add('assistant',j.reply||j.error||'Something went wrong.')}catch(e){chat.removeChild(chat.lastElementChild);add('assistant','Connection error: '+e.message)}}
+async function send(){const text=box.value.trim();if(!text&&!attachedFiles.length)return;box.value="";if(imageRequest(text)){await generateImage(imagePrompt(text),text);return}let fileText="";try{fileText=await uploadFiles()}catch(e){add("assistant","File error: "+e.message);return}const finalText=fileText?text+"\n\n[Attached file contents]\n"+fileText:text;add("user",text+(fileText?"\n📎 Attached file(s)":""));const thinking={role:"assistant",content:"Thinking…"};drawMessage(thinking);chat.lastElementChild.querySelector(".msg").classList.add("thinking");try{const msgs=current().messages.filter(m=>!m.image&&m.content!=="Thinking…").slice(-20).map(m=>({role:m.role,content:m.content}));msgs[msgs.length-1]={role:"user",content:finalText};const r=await fetch("/api/chat",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({messages:msgs,web_search:webEnabled})});const j=await r.json();chat.removeChild(chat.lastElementChild);add("assistant",j.reply||j.error||"Something went wrong.")}catch(e){chat.removeChild(chat.lastElementChild);add("assistant","Connection error: "+e.message)}}
 async function generateImage(prompt,shown){add('user',shown);add('assistant','Creating your image…');const row=chat.lastElementChild;row.querySelector('.msg').classList.add('thinking');try{const r=await fetch('/api/image',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({prompt})});const j=await r.json();chat.removeChild(row);if(j.image)add('assistant','',j.image);else add('assistant',j.error||'Image generation failed.')}catch(e){chat.removeChild(row);add('assistant','Image error: '+e.message)}}
 async function regenerate(){const s=current();const last=s.messages.filter(m=>m.role==='user'&&!m.image).pop();if(!last)return;s.messages=s.messages.slice(0,-1);save();renderChat();box.value=last.content;await send()}
 function voice(){const R=window.SpeechRecognition||window.webkitSpeechRecognition;if(!R){alert('Voice input is not supported in this browser.');return}const rec=new R();rec.lang='en-IN';rec.interimResults=false;const b=document.getElementById('mic');b.textContent='⏺ Listening…';rec.onresult=e=>box.value=e.results[0][0].transcript;rec.onend=()=>b.textContent='🎙 Voice';rec.onerror=()=>b.textContent='🎙 Voice';rec.start()}
@@ -223,160 +97,14 @@ function openSettings(){document.getElementById('settings').classList.add('show'
 function closeSettings(){document.getElementById('settings').classList.remove('show')}
 function saveSettings(){localStorage.setItem('sambot_name',document.getElementById('displayName').value||'Sambot User');closeSettings()}
 function exportChats(){const blob=new Blob([JSON.stringify(sessions,null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='sambot-chats.json';a.click();URL.revokeObjectURL(a.href)}
+document.getElementById("fileInput").addEventListener("change",e=>{attachedFiles=Array.from(e.target.files||[]);document.getElementById("attachments").textContent=attachedFiles.length?"📎 "+attachedFiles.map(f=>f.name).join(", "):""});
+function toggleWeb(){webEnabled=!webEnabled;document.getElementById("webBtn").style.background=webEnabled?"#2c3039":""}
+function toggleMemory(){const old=localStorage.getItem("sambot_memory")||"";const value=prompt("What should Sambot remember? (stored only in this browser)",old);if(value!==null)localStorage.setItem("sambot_memory",value)}
+async function uploadFiles(){if(!attachedFiles.length)return "";const fd=new FormData();attachedFiles.forEach(f=>fd.append("files",f));const r=await fetch("/api/files",{method:"POST",body:fd});const j=await r.json();if(!r.ok)throw new Error(j.error||"File upload failed");attachedFiles=[];document.getElementById("fileInput").value="";document.getElementById("attachments").textContent="";return j.text||""}
 box.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send()}})
-window.authMode=authMode;window.submitAuth=submitAuth;window.logout=logout;window.newChat=newChat;window.send=send;window.toggleTheme=toggleTheme;window.openSettings=openSettings;window.closeSettings=closeSettings;window.saveSettings=saveSettings;window.exportChats=exportChats;window.toggleSidebar=toggleSidebar;window.voice=voice;window.regenerate=regenerate;window.chatMenu=chatMenu;window.loadChat=loadChat;ensure();renderHistory();renderChat();authMode(false);checkAuth();
+window.newChat=newChat;window.send=send;window.toggleTheme=toggleTheme;window.openSettings=openSettings;window.closeSettings=closeSettings;window.saveSettings=saveSettings;window.exportChats=exportChats;window.toggleSidebar=toggleSidebar;window.voice=voice;window.regenerate=regenerate;window.chatMenu=chatMenu;window.loadChat=loadChat;ensure();renderHistory();renderChat();
 </script>
 </body></html>"""
-
-def resend_send_otp(email, otp):
-    api_key=os.getenv("RESEND_API_KEY","").strip()
-    if not api_key:
-        raise RuntimeError("Resend is not configured in Render. Add RESEND_API_KEY.")
-    sender=os.getenv("RESEND_FROM_EMAIL","onboarding@resend.dev").strip()
-    sender_name=os.getenv("RESEND_FROM_NAME","SAMBOT X").strip()
-    payload={
-        "from":f"{sender_name} <{sender}>",
-        "to":[email],
-        "subject":"Your SAMBOT X verification code",
-        "text":f"""Your SAMBOT X verification code is: {otp}
-
-This code expires in 10 minutes.
-
-If you did not create a SAMBOT X account, you can ignore this email.
-"""
-    }
-    r=requests.post(
-        "https://api.resend.com/emails",
-        headers={"Authorization":f"Bearer {api_key}","Content-Type":"application/json"},
-        json=payload,
-        timeout=30
-    )
-    if not r.ok:
-        try: detail=r.json()
-        except Exception: detail=r.text[:1000]
-        raise RuntimeError(f"Resend returned HTTP {r.status_code}: {detail}")
-    return r.json()
-
-
-def make_otp():
-    return f"{secrets.randbelow(1000000):06d}"
-
-def otp_hash(email,otp):
-    return hashlib.sha256(f"{email.lower()}:{otp}".encode()).hexdigest()
-
-@app.post("/api/signup")
-def signup(data: dict):
-    name=str(data.get("name","")).strip()
-    email=str(data.get("email","")).strip().lower()
-    password=str(data.get("password",""))
-    if not name or "@" not in email or len(password)<6:
-        return JSONResponse({"error":"Enter a name, valid email, and password of at least 6 characters."},status_code=400)
-    con=db()
-    existing=con.execute("SELECT id FROM users WHERE email=?",(email,)).fetchone()
-    if existing:
-        con.close()
-        return JSONResponse({"error":"An account with that email already exists. Please log in."},status_code=409)
-    otp=make_otp()
-    expires=(datetime.now(timezone.utc)+timedelta(minutes=10)).isoformat()
-    con.execute("INSERT OR REPLACE INTO signup_otps(email,name,password_hash,otp_hash,expires_at) VALUES(?,?,?,?,?)",
-                (email,name,hash_password(password),otp_hash(email,otp),expires))
-    con.commit()
-    con.close()
-    try:
-        resend_send_otp(email,otp)
-    except Exception as e:
-        con=db()
-        con.execute("DELETE FROM signup_otps WHERE email=?",(email,))
-        con.commit()
-        con.close()
-        return JSONResponse({"error":f"Could not send OTP email: {e}"},status_code=500)
-    return {"ok":True,"otp_required":True}
-
-@app.post("/api/verify-otp")
-def verify_otp(data: dict):
-    email=str(data.get("email","")).strip().lower()
-    otp=str(data.get("otp","")).strip()
-    if "@" not in email or not otp.isdigit() or len(otp)!=6:
-        return JSONResponse({"error":"Enter the 6-digit OTP."},status_code=400)
-    con=db()
-    row=con.execute("SELECT * FROM signup_otps WHERE email=?",(email,)).fetchone()
-    if not row:
-        con.close()
-        return JSONResponse({"error":"No pending signup found. Please sign up again."},status_code=400)
-    try:
-        expires=datetime.fromisoformat(row["expires_at"])
-    except Exception:
-        expires=datetime.now(timezone.utc)-timedelta(seconds=1)
-    if datetime.now(timezone.utc)>expires:
-        con.execute("DELETE FROM signup_otps WHERE email=?",(email,))
-        con.commit()
-        con.close()
-        return JSONResponse({"error":"OTP expired. Please request a new one."},status_code=400)
-    if not secrets.compare_digest(otp_hash(email,otp),row["otp_hash"]):
-        con.close()
-        return JSONResponse({"error":"Incorrect OTP. Please try again."},status_code=400)
-    try:
-        cur=con.execute("INSERT INTO users(name,email,password_hash) VALUES(?,?,?)",(row["name"],email,row["password_hash"]))
-        con.execute("DELETE FROM signup_otps WHERE email=?",(email,))
-        con.commit()
-        uid=cur.lastrowid
-    except sqlite3.IntegrityError:
-        con.close()
-        return JSONResponse({"error":"An account with that email already exists. Please log in."},status_code=409)
-    con.close()
-    token=secrets.token_urlsafe(32)
-    SESSIONS[token]=uid
-    out=JSONResponse({"ok":True,"user":{"id":uid,"name":row["name"],"email":email}})
-    out.set_cookie("sambot_session",token,httponly=True,samesite="lax",secure=True,max_age=2592000)
-    return out
-
-@app.post("/api/resend-otp")
-def resend_otp(data: dict):
-    email=str(data.get("email","")).strip().lower()
-    if "@" not in email:
-        return JSONResponse({"error":"Enter a valid email."},status_code=400)
-    con=db()
-    row=con.execute("SELECT * FROM signup_otps WHERE email=?",(email,)).fetchone()
-    if not row:
-        con.close()
-        return JSONResponse({"error":"No pending signup found. Please sign up again."},status_code=400)
-    otp=make_otp()
-    expires=(datetime.now(timezone.utc)+timedelta(minutes=10)).isoformat()
-    con.execute("UPDATE signup_otps SET otp_hash=?,expires_at=? WHERE email=?",(otp_hash(email,otp),expires,email))
-    con.commit()
-    con.close()
-    try:
-        smtp_send_otp(email,otp)
-    except Exception as e:
-        return JSONResponse({"error":f"Could not send OTP email: {e}"},status_code=500)
-    return {"ok":True}
-
-@app.post("/api/login")
-def login(data: dict):
-    email=str(data.get("email","")).strip().lower()
-    password=str(data.get("password",""))
-    con=db()
-    user=con.execute("SELECT * FROM users WHERE email=?",(email,)).fetchone()
-    con.close()
-    if not user or not verify_password(password,user["password_hash"]):
-        return {"error":"Incorrect email or password."}
-    token=secrets.token_urlsafe(32)
-    SESSIONS[token]=user["id"]
-    out=JSONResponse({"ok":True,"user":{"id":user["id"],"name":user["name"],"email":user["email"]}})
-    out.set_cookie("sambot_session",token,httponly=True,samesite="lax",secure=True,max_age=2592000)
-    return out
-
-@app.get("/api/me")
-def me(request: Request):
-    return {"user":current_user(request)}
-
-@app.post("/api/logout")
-def logout(request: Request):
-    token=request.cookies.get("sambot_session")
-    SESSIONS.pop(token,None)
-    out=JSONResponse({"ok":True})
-    out.delete_cookie("sambot_session")
-    return out
 
 @app.get("/", response_class=HTMLResponse)
 def home():
@@ -384,12 +112,63 @@ def home():
 
 @app.get("/health")
 def health():
-    return {
-        "ok": True,
-        "groq_configured": bool(os.getenv("GROQ_API_KEY")),
-        "cloudflare_configured": bool(os.getenv("CLOUDFLARE_ACCOUNT_ID") and os.getenv("CLOUDFLARE_API_TOKEN")),
-        "resend_configured": bool(os.getenv("RESEND_API_KEY"))
-    }
+    return {"ok":True,"groq_configured":bool(os.getenv("GROQ_API_KEY")),"cloudflare_configured":bool(os.getenv("CLOUDFLARE_ACCOUNT_ID") and os.getenv("CLOUDFLARE_API_TOKEN")),"features":["chat","image_generation","web_search","file_uploads","voice_input","read_aloud","local_history","local_memory"]}
+
+def extract_file_text(file, raw):
+    name=(file.filename or "").lower()
+    if name.endswith((".txt",".md",".csv",".json",".py",".js",".html",".css")):
+        return raw.decode("utf-8","ignore")[:120000]
+    if name.endswith(".pdf"):
+        try:
+            from pypdf import PdfReader
+            import io
+            return "\n".join((p.extract_text() or "") for p in PdfReader(io.BytesIO(raw)).pages)[:120000]
+        except Exception as e:
+            return f"[PDF extraction unavailable: {e}]"
+    if name.endswith(".docx"):
+        try:
+            from docx import Document
+            import io
+            return "\n".join(p.text for p in Document(io.BytesIO(raw)).paragraphs)[:120000]
+        except Exception as e:
+            return f"[DOCX extraction unavailable: {e}]"
+    if name.endswith((".xlsx",".xls")):
+        try:
+            from openpyxl import load_workbook
+            import io
+            wb=load_workbook(io.BytesIO(raw),read_only=True,data_only=True)
+            out=[]
+            for ws in wb.worksheets:
+                out.append("SHEET: "+ws.title)
+                for row in ws.iter_rows(values_only=True): out.append("\t".join("" if v is None else str(v) for v in row))
+            return "\n".join(out)[:120000]
+        except Exception as e:
+            return f"[Spreadsheet extraction unavailable: {e}]"
+    return f"[Uploaded file: {file.filename}. This file type is not text-extractable yet.]"
+
+@app.post("/api/files")
+async def files(files: list[UploadFile] = File(...)):
+    if not files:return JSONResponse({"error":"No files uploaded."},status_code=400)
+    parts=[]
+    for f in files[:10]:
+        raw=await f.read()
+        if len(raw)>20*1024*1024:return JSONResponse({"error":f"{f.filename} is larger than 20 MB."},status_code=413)
+        parts.append(f"FILE: {f.filename}\n{extract_file_text(f,raw)}")
+    return {"ok":True,"text":"\n\n".join(parts)}
+
+def web_search(query):
+    try:
+        from bs4 import BeautifulSoup
+        r=requests.get("https://html.duckduckgo.com/html/",params={"q":query},headers={"User-Agent":"Mozilla/5.0"},timeout=15)
+        soup=BeautifulSoup(r.text,"html.parser")
+        out=[]
+        for a in soup.select(".result__a")[:6]:
+            parent=a.parent.parent if a.parent else None
+            sn=parent.select_one(".result__snippet") if parent else None
+            out.append({"title":a.get_text(" ",strip=True),"url":a.get("href",""),"snippet":sn.get_text(" ",strip=True) if sn else ""})
+        return out
+    except Exception as e:
+        return [{"title":"Web search unavailable","url":"","snippet":str(e)}]
 
 @app.post("/api/image")
 def image(req: ImageRequest):
@@ -423,17 +202,19 @@ def image(req: ImageRequest):
 @app.post("/api/chat")
 def chat(req: ChatRequest):
     key=os.getenv("GROQ_API_KEY")
-    if not key:
-        return {"error":"GROQ_API_KEY is not configured in Render."}
+    if not key:return {"error":"GROQ_API_KEY is not configured in Render."}
     try:
         client=Groq(api_key=key)
         messages=[{"role":m.role,"content":m.content} for m in req.messages if m.role in ("user","assistant")][-20:]
-        r=client.chat.completions.create(
-            model=os.getenv("GROQ_MODEL","openai/gpt-oss-120b"),
-            messages=[{"role":"system","content":"You are Sambot X, a highly capable helpful AI assistant. Answer naturally, accurately, and clearly. Help with coding, writing, studying, brainstorming, math, explanations, and general tasks. If the user asks to create/generate an image, the web app handles that separately."}]+messages,
-            temperature=0.7,
-            max_tokens=1200,
-        )
+        context=""
+        if req.web_search and messages:
+            results=web_search(messages[-1]["content"])
+            context="\n\nCURRENT WEB RESULTS:\n"+"\n".join(f"- {x['title']} | {x['url']} | {x['snippet']}" for x in results)
+        memory=os.getenv("SAMBOT_GLOBAL_MEMORY","").strip()
+        system=("You are Sambot X, a highly capable helpful AI assistant. Be accurate, clear, and honest about limitations. "
+                "Help with coding, writing, studying, math, planning, brainstorming, analysis, and general tasks. "
+                "Use attached file contents when supplied. If web results are supplied, use them for current information and mention sources naturally. "
+                "The browser may also provide local memory."+(" A server memory is configured." if memory else ""))
+        r=client.chat.completions.create(model=os.getenv("GROQ_MODEL","openai/gpt-oss-120b"),messages=[{"role":"system","content":system+context}]+messages,temperature=0.7,max_tokens=1800)
         return {"reply":r.choices[0].message.content}
-    except Exception as e:
-        return {"error":f"Groq error: {e}"}
+    except Exception as e:return {"error":f"Groq error: {e}"}
