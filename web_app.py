@@ -3,6 +3,9 @@ import requests
 import sqlite3
 import secrets
 import hashlib
+import smtplib
+from email.message import EmailMessage
+from datetime import datetime, timedelta, timezone
 from fastapi import Request
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse, JSONResponse
@@ -18,6 +21,7 @@ def db():
     con=sqlite3.connect(DB_PATH)
     con.row_factory=sqlite3.Row
     con.execute("CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL,email TEXT UNIQUE NOT NULL,password_hash TEXT NOT NULL)")
+    con.execute("CREATE TABLE IF NOT EXISTS signup_otps (email TEXT PRIMARY KEY,name TEXT NOT NULL,password_hash TEXT NOT NULL,otp_hash TEXT NOT NULL,expires_at TEXT NOT NULL)")
     con.commit()
     return con
 
@@ -119,12 +123,7 @@ button,input,textarea{font:inherit}.app{height:100vh;display:flex}.sidebar{width
 <button class="toolbtn" onclick="closeSettings()">Close</button>
 </div></div>
 
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script>
-const SUPABASE_URL="__SUPABASE_URL__";
-const SUPABASE_PUBLISHABLE_KEY="__SUPABASE_PUBLISHABLE_KEY__";
-const supabaseClient=(SUPABASE_URL&&SUPABASE_PUBLISHABLE_KEY)?window.supabase.createClient(SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY):null;
-</script><script>let signupMode=false,otpPending=false;
+<script>let signupMode=false,otpPending=false;
 function authMode(signup){
 signupMode=signup;otpPending=false;
 document.getElementById('authName').style.display=signup?'block':'none';
@@ -136,55 +135,67 @@ document.getElementById('authMsg').textContent='';
 document.getElementById('authOtp').value='';
 }
 async function submitAuth(){
-const name=document.getElementById('authName').value.trim(),email=document.getElementById('authEmail').value.trim(),password=document.getElementById('authPassword').value,msg=document.getElementById('authMsg');
-if(!supabaseClient){msg.textContent='Supabase is not configured yet. Add SUPABASE_URL and SUPABASE_PUBLISHABLE_KEY in Render.';return}
+const name=document.getElementById('authName').value.trim();
+const email=document.getElementById('authEmail').value.trim();
+const password=document.getElementById('authPassword').value;
+const msg=document.getElementById('authMsg');
 if(!email||!password||(signupMode&&!name)){msg.textContent='Please fill all fields.';return}
 msg.style.color='#ff8b8b';msg.textContent='Please wait…';
-const result=signupMode
-?await supabaseClient.auth.signUp({email,password,options:{data:{display_name:name}}})
-:await supabaseClient.auth.signInWithPassword({email,password});
-if(result.error){msg.textContent=result.error.message;return}
+const endpoint=signupMode?'/api/signup':'/api/login';
+const payload=signupMode?{name,email,password}:{email,password};
+try{
+const r=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+const j=await r.json();
+if(!r.ok||j.error){msg.textContent=j.error||'Something went wrong.';return}
 if(signupMode){
-if(result.data.session&&result.data.user){document.getElementById('auth').style.display='none';setUser(result.data.user);return}
 otpPending=true;
 document.getElementById('authOtp').value='';
 document.getElementById('otpBox').style.display='block';
 document.getElementById('authSubmit').style.display='none';
-document.getElementById('authMsg').style.color='#9fe3a1';
-document.getElementById('authMsg').textContent='OTP sent to your email. Enter the 6-digit code below.';
+msg.style.color='#9fe3a1';
+msg.textContent='OTP sent to your email. Enter the 6-digit code below.';
 return;
 }
-if(result.data.user){document.getElementById('auth').style.display='none';setUser(result.data.user)}
+if(j.user){document.getElementById('auth').style.display='none';setUser(j.user)}
+}catch(e){msg.textContent='Connection error: '+e.message}
 }
 async function verifySignupOtp(){
 if(!otpPending)return;
-const email=document.getElementById('authEmail').value.trim(),token=document.getElementById('authOtp').value.trim(),msg=document.getElementById('authMsg');
+const email=document.getElementById('authEmail').value.trim();
+const token=document.getElementById('authOtp').value.trim();
+const msg=document.getElementById('authMsg');
 if(!/^\d{6}$/.test(token)){msg.style.color='#ff8b8b';msg.textContent='Enter the 6-digit OTP from your email.';return}
 msg.style.color='#aaa';msg.textContent='Verifying OTP…';
-const {data,error}=await supabaseClient.auth.verifyOtp({email,token,type:'email'});
-if(error){msg.style.color='#ff8b8b';msg.textContent=error.message;return}
-if(data.user){otpPending=false;document.getElementById('auth').style.display='none';setUser(data.user)}
+try{
+const r=await fetch('/api/verify-otp',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,otp:token})});
+const j=await r.json();
+if(!r.ok||j.error){msg.style.color='#ff8b8b';msg.textContent=j.error||'Invalid OTP.';return}
+if(j.user){otpPending=false;document.getElementById('auth').style.display='none';setUser(j.user)}
+}catch(e){msg.style.color='#ff8b8b';msg.textContent='Connection error: '+e.message}
 }
 async function resendSignupOtp(){
-const email=document.getElementById('authEmail').value.trim(),msg=document.getElementById('authMsg');
+const email=document.getElementById('authEmail').value.trim();
+const msg=document.getElementById('authMsg');
 if(!email){msg.textContent='Enter your email first.';return}
 msg.style.color='#aaa';msg.textContent='Sending a new OTP…';
-const {error}=await supabaseClient.auth.signInWithOtp({email,options:{shouldCreateUser:false}});
-if(error){msg.style.color='#ff8b8b';msg.textContent=error.message;return}
+try{
+const r=await fetch('/api/resend-otp',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email})});
+const j=await r.json();
+if(!r.ok||j.error){msg.style.color='#ff8b8b';msg.textContent=j.error||'Could not resend OTP.';return}
 msg.style.color='#9fe3a1';msg.textContent='A new OTP has been sent.';
+}catch(e){msg.style.color='#ff8b8b';msg.textContent='Connection error: '+e.message}
 }
-function setUser(u){const name=u.user_metadata?.display_name||u.email?.split('@')[0]||'Sambot User';document.getElementById('profileName').textContent=name;document.getElementById('profileEmail').textContent=u.email||'';document.getElementById('avatar').textContent=name.charAt(0).toUpperCase()}
+function setUser(u){const name=u.name||u.email?.split('@')[0]||'Sambot User';document.getElementById('profileName').textContent=name;document.getElementById('profileEmail').textContent=u.email||'';document.getElementById('avatar').textContent=name.charAt(0).toUpperCase()}
 async function checkAuth(){
-if(!supabaseClient){document.getElementById('auth').style.display='flex';document.getElementById('authMsg').textContent='Supabase is not configured. Add the two Render variables.';return}
-const {data}=await supabaseClient.auth.getSession();
-if(data.session){document.getElementById('auth').style.display='none';setUser(data.session.user)}
+try{
+const r=await fetch('/api/me');
+const j=await r.json();
+if(j.user){document.getElementById('auth').style.display='none';setUser(j.user)}
 else document.getElementById('auth').style.display='flex';
-supabaseClient.auth.onAuthStateChange((_event,session)=>{
-if(session){document.getElementById('auth').style.display='none';setUser(session.user)}
-else document.getElementById('auth').style.display='flex'
-})
+}catch(e){document.getElementById('auth').style.display='flex'}
 }
-async function logout(){if(supabaseClient)await supabaseClient.auth.signOut();location.reload()}
+async function logout(){await fetch('/api/logout',{method:'POST'});location.reload()}
+
 
 const box=document.getElementById('box'),chat=document.getElementById('chat'),historyEl=document.getElementById('history'),sidebar=document.getElementById('sidebar');
 let sessions=[];try{sessions=JSON.parse(localStorage.getItem('sambot_sessions')||'[]');if(!Array.isArray(sessions))sessions=[]}catch(e){localStorage.removeItem('sambot_sessions');sessions=[]}let currentId=localStorage.getItem('sambot_current')||'';
@@ -219,8 +230,31 @@ window.authMode=authMode;window.submitAuth=submitAuth;window.logout=logout;windo
 </script>
 </body></html>"""
 
-# Inject only the public Supabase browser configuration; never expose a secret/service key.
-HTML=HTML.replace("__SUPABASE_URL__", os.getenv("SUPABASE_URL","")).replace("__SUPABASE_PUBLISHABLE_KEY__", os.getenv("SUPABASE_PUBLISHABLE_KEY",""))
+def smtp_send_otp(email, otp):
+    sender=os.getenv("GMAIL_SMTP_USER","").strip()
+    app_password=os.getenv("GMAIL_SMTP_APP_PASSWORD","").replace(" ","").strip()
+    if not sender or not app_password:
+        raise RuntimeError("Gmail SMTP is not configured in Render. Add GMAIL_SMTP_USER and GMAIL_SMTP_APP_PASSWORD.")
+    msg=EmailMessage()
+    msg["Subject"]="Your SAMBOT X verification code"
+    msg["From"]=f"SAMBOT X <{sender}>"
+    msg["To"]=email
+    msg.set_content(f"""Your SAMBOT X verification code is: {otp}
+
+This code expires in 10 minutes.
+
+If you did not create a SAMBOT X account, you can ignore this email.
+""")
+    with smtplib.SMTP("smtp.gmail.com",587,timeout=30) as server:
+        server.starttls()
+        server.login(sender,app_password)
+        server.send_message(msg)
+
+def make_otp():
+    return f"{secrets.randbelow(1000000):06d}"
+
+def otp_hash(email,otp):
+    return hashlib.sha256(f"{email.lower()}:{otp}".encode()).hexdigest()
 
 @app.post("/api/signup")
 def signup(data: dict):
@@ -228,21 +262,86 @@ def signup(data: dict):
     email=str(data.get("email","")).strip().lower()
     password=str(data.get("password",""))
     if not name or "@" not in email or len(password)<6:
-        return {"error":"Enter a name, valid email, and password of at least 6 characters."}
+        return JSONResponse({"error":"Enter a name, valid email, and password of at least 6 characters."},status_code=400)
     con=db()
+    existing=con.execute("SELECT id FROM users WHERE email=?",(email,)).fetchone()
+    if existing:
+        con.close()
+        return JSONResponse({"error":"An account with that email already exists. Please log in."},status_code=409)
+    otp=make_otp()
+    expires=(datetime.now(timezone.utc)+timedelta(minutes=10)).isoformat()
+    con.execute("INSERT OR REPLACE INTO signup_otps(email,name,password_hash,otp_hash,expires_at) VALUES(?,?,?,?,?)",
+                (email,name,hash_password(password),otp_hash(email,otp),expires))
+    con.commit()
+    con.close()
     try:
-        cur=con.execute("INSERT INTO users(name,email,password_hash) VALUES(?,?,?)",(name,email,hash_password(password)))
+        smtp_send_otp(email,otp)
+    except Exception as e:
+        con=db()
+        con.execute("DELETE FROM signup_otps WHERE email=?",(email,))
+        con.commit()
+        con.close()
+        return JSONResponse({"error":f"Could not send OTP email: {e}"},status_code=500)
+    return {"ok":True,"otp_required":True}
+
+@app.post("/api/verify-otp")
+def verify_otp(data: dict):
+    email=str(data.get("email","")).strip().lower()
+    otp=str(data.get("otp","")).strip()
+    if "@" not in email or not otp.isdigit() or len(otp)!=6:
+        return JSONResponse({"error":"Enter the 6-digit OTP."},status_code=400)
+    con=db()
+    row=con.execute("SELECT * FROM signup_otps WHERE email=?",(email,)).fetchone()
+    if not row:
+        con.close()
+        return JSONResponse({"error":"No pending signup found. Please sign up again."},status_code=400)
+    try:
+        expires=datetime.fromisoformat(row["expires_at"])
+    except Exception:
+        expires=datetime.now(timezone.utc)-timedelta(seconds=1)
+    if datetime.now(timezone.utc)>expires:
+        con.execute("DELETE FROM signup_otps WHERE email=?",(email,))
+        con.commit()
+        con.close()
+        return JSONResponse({"error":"OTP expired. Please request a new one."},status_code=400)
+    if not secrets.compare_digest(otp_hash(email,otp),row["otp_hash"]):
+        con.close()
+        return JSONResponse({"error":"Incorrect OTP. Please try again."},status_code=400)
+    try:
+        cur=con.execute("INSERT INTO users(name,email,password_hash) VALUES(?,?,?)",(row["name"],email,row["password_hash"]))
+        con.execute("DELETE FROM signup_otps WHERE email=?",(email,))
         con.commit()
         uid=cur.lastrowid
     except sqlite3.IntegrityError:
         con.close()
-        return {"error":"An account with that email already exists."}
+        return JSONResponse({"error":"An account with that email already exists. Please log in."},status_code=409)
     con.close()
     token=secrets.token_urlsafe(32)
     SESSIONS[token]=uid
-    out=JSONResponse({"ok":True,"user":{"id":uid,"name":name,"email":email}})
+    out=JSONResponse({"ok":True,"user":{"id":uid,"name":row["name"],"email":email}})
     out.set_cookie("sambot_session",token,httponly=True,samesite="lax",secure=True,max_age=2592000)
     return out
+
+@app.post("/api/resend-otp")
+def resend_otp(data: dict):
+    email=str(data.get("email","")).strip().lower()
+    if "@" not in email:
+        return JSONResponse({"error":"Enter a valid email."},status_code=400)
+    con=db()
+    row=con.execute("SELECT * FROM signup_otps WHERE email=?",(email,)).fetchone()
+    if not row:
+        con.close()
+        return JSONResponse({"error":"No pending signup found. Please sign up again."},status_code=400)
+    otp=make_otp()
+    expires=(datetime.now(timezone.utc)+timedelta(minutes=10)).isoformat()
+    con.execute("UPDATE signup_otps SET otp_hash=?,expires_at=? WHERE email=?",(otp_hash(email,otp),expires,email))
+    con.commit()
+    con.close()
+    try:
+        smtp_send_otp(email,otp)
+    except Exception as e:
+        return JSONResponse({"error":f"Could not send OTP email: {e}"},status_code=500)
+    return {"ok":True}
 
 @app.post("/api/login")
 def login(data: dict):
@@ -280,7 +379,8 @@ def health():
     return {
         "ok": True,
         "groq_configured": bool(os.getenv("GROQ_API_KEY")),
-        "cloudflare_configured": bool(os.getenv("CLOUDFLARE_ACCOUNT_ID") and os.getenv("CLOUDFLARE_API_TOKEN"))
+        "cloudflare_configured": bool(os.getenv("CLOUDFLARE_ACCOUNT_ID") and os.getenv("CLOUDFLARE_API_TOKEN")),
+        "gmail_smtp_configured": bool(os.getenv("GMAIL_SMTP_USER") and os.getenv("GMAIL_SMTP_APP_PASSWORD"))
     }
 
 @app.post("/api/image")
