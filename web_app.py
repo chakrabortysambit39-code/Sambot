@@ -92,36 +92,37 @@ async function send(){
   box.value="";
   ensure();
   const session=current();
-  if(!session){add("assistant","Could not open a chat session. Click New chat and try again.");return;}
+  if(!session){showChatNotice("Could not open a chat session. Click New chat and try again.");return;}
   if(text&&imageRequest(text)){await generateImage(imagePrompt(text),text);return;}
-  let userShown=text;
   let fileText="";
-  // Show the message immediately so the UI never appears to swallow it.
   try{
     session.messages.push({role:"user",content:text||"📎 Attached file(s)"});
     if(session.title==="New chat"&&text)session.title=text.slice(0,36);
     save();renderHistory();renderChat();chat.scrollTop=chat.scrollHeight;
-    try{fileText=await uploadFiles();}
-    catch(e){add("assistant","File upload failed: "+e.message);return;}
+    try{fileText=await uploadFiles();}catch(e){showChatNotice("File upload failed: "+e.message);return;}
     const finalText=fileText?(text||"Please analyze the attached file(s).")+"\\n\\n[Attached file contents]\\n"+fileText:text;
     const thinking={role:"assistant",content:"Thinking…"};
     drawMessage(thinking);
     const thinkingRow=chat.lastElementChild;
     if(thinkingRow)thinkingRow.querySelector(".msg")?.classList.add("thinking");
-    try{
-      const msgs=current().messages.filter(m=>!m.image&&m.content!=="Thinking…").slice(-20).map(m=>({role:m.role,content:m.content}));
-      if(fileText)msgs[msgs.length-1]={role:"user",content:finalText};
-      const response=await fetch("/api/chat",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({messages:msgs,web_search:webEnabled})});
-      let j={};try{j=await response.json()}catch(_){}
-      if(thinkingRow)thinkingRow.remove();
-      if(!response.ok)add("assistant",j.detail||j.error||("Server error HTTP "+response.status));
-      else add("assistant",j.reply||j.error||"The AI returned an empty response. Please try again.");
-    }catch(e){if(thinkingRow)thinkingRow.remove();add("assistant","Could not get a reply: "+(e?.message||String(e)));}
+    const msgs=current().messages.filter(m=>!m.image&&m.content!=="Thinking…").slice(-20).map(m=>({role:m.role,content:m.content}));
+    if(fileText)msgs[msgs.length-1]={role:"user",content:finalText};
+    const response=await fetch("/api/chat",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({messages:msgs,web_search:webEnabled})});
+    let j={};try{j=await response.json()}catch(_){}
+    if(thinkingRow)thinkingRow.remove();
+    const answer=response.ok?(j.reply||j.error||"The AI returned an empty response. Please try again."):(j.detail||j.error||("Server error HTTP "+response.status));
+    add("assistant",answer);
   }catch(e){
+    const old=chat.querySelector(".thinking")?.closest(".row");if(old)old.remove();
+    showChatNotice("Could not get a reply: "+(e?.message||String(e)));
+  }
+}
+function showChatNotice(message){
+  try{add("assistant",message)}catch(_){
     const row=document.createElement("div");row.className="row assistant";
     const wrap=document.createElement("div");wrap.className="wrap";
-    const msg=document.createElement("div");msg.className="msg";msg.textContent="Sambot interface error: "+(e?.message||String(e));
-    wrap.appendChild(msg);row.appendChild(wrap);chat.appendChild(row);
+    const msg=document.createElement("div");msg.className="msg";msg.textContent=message;
+    wrap.appendChild(msg);row.appendChild(wrap);chat.appendChild(row);chat.scrollTop=chat.scrollHeight;
   }
 }
 async function generateImage(prompt,shown){add('user',shown);add('assistant','Creating your image…');const row=chat.lastElementChild;row.querySelector('.msg').classList.add('thinking');try{const r=await fetch('/api/image',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({prompt})});const j=await r.json();chat.removeChild(row);if(j.image)add('assistant','',j.image);else add('assistant',j.error||'Image generation failed.')}catch(e){chat.removeChild(row);add('assistant','Image error: '+e.message)}}
@@ -252,19 +253,33 @@ def image(req: ImageRequest):
 @app.post("/api/chat")
 def chat(req: ChatRequest):
     key=os.getenv("GROQ_API_KEY")
-    if not key:return {"error":"GROQ_API_KEY is not configured in Render."}
+    if not key:
+        print("SAMBOT_CHAT_ERROR: GROQ_API_KEY is not configured")
+        return JSONResponse({"error":"GROQ_API_KEY is not configured in Render."},status_code=503)
     try:
-        client=Groq(api_key=key)
+        client=Groq(api_key=key, timeout=45.0, max_retries=1)
         messages=[{"role":m.role,"content":m.content} for m in req.messages if m.role in ("user","assistant")][-20:]
+        if not messages:
+            return JSONResponse({"error":"No chat messages were sent."},status_code=400)
         context=""
-        if req.web_search and messages:
+        if req.web_search:
             results=web_search(messages[-1]["content"])
-            context="\n\nCURRENT WEB RESULTS:\n"+"\n".join(f"- {x['title']} | {x['url']} | {x['snippet']}" for x in results)
-        memory=os.getenv("SAMBOT_GLOBAL_MEMORY","").strip()
-        system=("You are Sambot X, a highly capable helpful AI assistant. Be accurate, clear, and honest about limitations. "
-                "Help with coding, writing, studying, math, planning, brainstorming, analysis, and general tasks. "
-                "Use attached file contents when supplied. If web results are supplied, use them for current information and mention sources naturally. "
-                "The browser may also provide local memory."+(" A server memory is configured." if memory else ""))
-        r=client.chat.completions.create(model=os.getenv("GROQ_MODEL","openai/gpt-oss-120b"),messages=[{"role":"system","content":system+context}]+messages,temperature=0.7,max_tokens=1800)
-        return {"reply":r.choices[0].message.content}
-    except Exception as e:return {"error":f"Groq error: {e}"}
+            context="\\n\\nCURRENT WEB RESULTS:\\n"+"\\n".join(f"- {x['title']} | {x['url']} | {x['snippet']}" for x in results)
+        system=("You are Sambot X, a helpful AI assistant. Be accurate, clear, and honest about limitations. "
+                "Help with coding, writing, studying, math, planning, brainstorming, and general tasks. "
+                "Use attached file contents when supplied. If web results are supplied, use them for current information and mention sources naturally.")
+        result=client.chat.completions.create(
+            model=os.getenv("GROQ_MODEL","openai/gpt-oss-120b"),
+            messages=[{"role":"system","content":system+context}]+messages,
+            temperature=0.7,
+            max_tokens=1800,
+        )
+        reply=result.choices[0].message.content
+        if not reply:
+            print("SAMBOT_CHAT_ERROR: Groq returned an empty message")
+            return JSONResponse({"error":"Groq returned an empty reply. Check GROQ_MODEL in Render."},status_code=502)
+        print("SAMBOT_CHAT_OK: reply generated")
+        return {"reply":reply}
+    except Exception as e:
+        print(f"SAMBOT_CHAT_ERROR: {type(e).__name__}: {e}")
+        return JSONResponse({"error":f"AI request failed ({type(e).__name__}): {e}"},status_code=502)
