@@ -83,7 +83,7 @@ function drawMessage(m){const row=document.createElement('div');row.className='r
 function loadChat(id){currentId=id;save();renderHistory();renderChat();sidebar.classList.remove('open')}
 function newChat(){currentId=Date.now().toString();sessions.unshift({id:currentId,title:'New chat',messages:[]});save();renderHistory();renderChat();box.focus()}
 function chatMenu(id){const s=sessions.find(x=>x.id===id);if(!s)return;const action=prompt('Type rename or delete');if(action==='rename'){const n=prompt('New chat name',titleFor(s));if(n){s.title=n;save();renderHistory()}}else if(action==='delete'){if(confirm('Delete this chat?')){sessions=sessions.filter(x=>x.id!==id);if(currentId===id)currentId='';ensure();save();renderHistory();renderChat()}}}
-function add(role,content,image){const s=current();s.messages.push({role,content,image});if(role==='user'&&s.title==='New chat')s.title=content.slice(0,36);save();drawMessage({role,content,image});chat.scrollTop=chat.scrollHeight;renderHistory()}
+function add(role,content,image){ensure();const s=current();if(!s)return;const message={role,content,image};s.messages.push(message);if(role==='user'&&s.title==='New chat')s.title=(content||'New chat').slice(0,36);save();renderChat();chat.scrollTop=chat.scrollHeight;renderHistory()}
 function imageRequest(s){return /\b(create|generate|make|draw|render)\s+(an?\s+)?image\b/i.test(s)||/^\/image\b/i.test(s)}
 function imagePrompt(s){return s.replace(/^\/image\s*/i,'').replace(/^\s*(create|generate|make|draw|render)\s+(an?\s+)?image\s*(of|showing)?\s*/i,'').trim()||s}
 async function send(){
@@ -112,6 +112,7 @@ async function send(){
     if(thinkingRow)thinkingRow.remove();
     const answer=response.ok?(j.reply||j.error||"The AI returned an empty response. Please try again."):(j.detail||j.error||("Server error HTTP "+response.status));
     add("assistant",answer);
+    renderChat();chat.scrollTop=chat.scrollHeight;
   }catch(e){
     const old=chat.querySelector(".thinking")?.closest(".row");if(old)old.remove();
     showChatNotice("Could not get a reply: "+(e?.message||String(e)));
