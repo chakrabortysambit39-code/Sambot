@@ -86,7 +86,44 @@ function chatMenu(id){const s=sessions.find(x=>x.id===id);if(!s)return;const act
 function add(role,content,image){const s=current();s.messages.push({role,content,image});if(role==='user'&&s.title==='New chat')s.title=content.slice(0,36);save();drawMessage({role,content,image});chat.scrollTop=chat.scrollHeight;renderHistory()}
 function imageRequest(s){return /\b(create|generate|make|draw|render)\s+(an?\s+)?image\b/i.test(s)||/^\/image\b/i.test(s)}
 function imagePrompt(s){return s.replace(/^\/image\s*/i,'').replace(/^\s*(create|generate|make|draw|render)\s+(an?\s+)?image\s*(of|showing)?\s*/i,'').trim()||s}
-async function send(){const text=box.value.trim();if(!text&&!attachedFiles.length)return;box.value="";if(text&&imageRequest(text)){await generateImage(imagePrompt(text),text);return}let fileText="";try{fileText=await uploadFiles()}catch(e){add("assistant","File error: "+e.message);return}const finalText=fileText?(text||"Please analyze the attached file(s).")+"\\n\\n[Attached file contents]\\n"+fileText:text;add("user",text+(fileText?"\\n📎 Attached file(s)":""));const thinking={role:"assistant",content:"Thinking…"};drawMessage(thinking);const thinkingRow=chat.lastElementChild;thinkingRow.querySelector(".msg").classList.add("thinking");try{const msgs=current().messages.filter(m=>!m.image&&m.content!=="Thinking…").slice(-20).map(m=>({role:m.role,content:m.content}));if(fileText)msgs[msgs.length-1]={role:"user",content:finalText};const response=await fetch("/api/chat",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({messages:msgs,web_search:webEnabled})});let j;try{j=await response.json()}catch(e){throw new Error("Server returned HTTP "+response.status+" without valid JSON.")}thinkingRow.remove();if(!response.ok)add("assistant",j.detail||j.error||("Server error HTTP "+response.status));else add("assistant",j.reply||j.error||"The AI returned an empty response. Please try again.")}catch(e){thinkingRow.remove();add("assistant","Could not get a reply: "+e.message)}}
+async function send(){
+  const text=box.value.trim();
+  if(!text&&!attachedFiles.length)return;
+  box.value="";
+  ensure();
+  const session=current();
+  if(!session){add("assistant","Could not open a chat session. Click New chat and try again.");return;}
+  if(text&&imageRequest(text)){await generateImage(imagePrompt(text),text);return;}
+  let userShown=text;
+  let fileText="";
+  // Show the message immediately so the UI never appears to swallow it.
+  try{
+    session.messages.push({role:"user",content:text||"📎 Attached file(s)"});
+    if(session.title==="New chat"&&text)session.title=text.slice(0,36);
+    save();renderHistory();renderChat();chat.scrollTop=chat.scrollHeight;
+    try{fileText=await uploadFiles();}
+    catch(e){add("assistant","File upload failed: "+e.message);return;}
+    const finalText=fileText?(text||"Please analyze the attached file(s).")+"\\n\\n[Attached file contents]\\n"+fileText:text;
+    const thinking={role:"assistant",content:"Thinking…"};
+    drawMessage(thinking);
+    const thinkingRow=chat.lastElementChild;
+    if(thinkingRow)thinkingRow.querySelector(".msg")?.classList.add("thinking");
+    try{
+      const msgs=current().messages.filter(m=>!m.image&&m.content!=="Thinking…").slice(-20).map(m=>({role:m.role,content:m.content}));
+      if(fileText)msgs[msgs.length-1]={role:"user",content:finalText};
+      const response=await fetch("/api/chat",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({messages:msgs,web_search:webEnabled})});
+      let j={};try{j=await response.json()}catch(_){}
+      if(thinkingRow)thinkingRow.remove();
+      if(!response.ok)add("assistant",j.detail||j.error||("Server error HTTP "+response.status));
+      else add("assistant",j.reply||j.error||"The AI returned an empty response. Please try again.");
+    }catch(e){if(thinkingRow)thinkingRow.remove();add("assistant","Could not get a reply: "+(e?.message||String(e)));}
+  }catch(e){
+    const row=document.createElement("div");row.className="row assistant";
+    const wrap=document.createElement("div");wrap.className="wrap";
+    const msg=document.createElement("div");msg.className="msg";msg.textContent="Sambot interface error: "+(e?.message||String(e));
+    wrap.appendChild(msg);row.appendChild(wrap);chat.appendChild(row);
+  }
+}
 async function generateImage(prompt,shown){add('user',shown);add('assistant','Creating your image…');const row=chat.lastElementChild;row.querySelector('.msg').classList.add('thinking');try{const r=await fetch('/api/image',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({prompt})});const j=await r.json();chat.removeChild(row);if(j.image)add('assistant','',j.image);else add('assistant',j.error||'Image generation failed.')}catch(e){chat.removeChild(row);add('assistant','Image error: '+e.message)}}
 async function regenerate(){const s=current();const last=s.messages.filter(m=>m.role==='user'&&!m.image).pop();if(!last)return;s.messages=s.messages.slice(0,-1);save();renderChat();box.value=last.content;await send()}
 function voice(){const R=window.SpeechRecognition||window.webkitSpeechRecognition;if(!R){alert('Voice input is not supported in this browser.');return}const rec=new R();rec.lang='en-IN';rec.interimResults=false;const b=document.getElementById('mic');b.textContent='⏺ Listening…';rec.onresult=e=>box.value=e.results[0][0].transcript;rec.onend=()=>b.textContent='🎙 Voice';rec.onerror=()=>b.textContent='🎙 Voice';rec.start()}
