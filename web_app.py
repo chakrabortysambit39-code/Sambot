@@ -44,7 +44,6 @@ button,input,textarea{font:inherit}.app{height:100vh;display:flex}.sidebar{width
 <button class="sidebtn" onclick="exportChats()">⇩ Export chats</button><button class="sidebtn" onclick="toggleMemory()">🧠 Memory</button>
 <button class="sidebtn" onclick="toggleTheme()">☼ Appearance</button>
 <div class="profile"><div class="avatar">S</div><div><b>Sambot User</b><div style="font-size:10px;opacity:.4">Local session</div></div></div></div>
-</div>
 </aside>
 <section class="main">
 <header class="topbar">
