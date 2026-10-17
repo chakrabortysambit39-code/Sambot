@@ -1,14 +1,67 @@
 """Render entry point for Sambot X, including optional feature routes."""
-from fastapi import FastAPI
-from fastapi.responses import HTMLResponse
+import os
+from fastapi import HTTPException
+from fastapi.responses import HTMLResponse, JSONResponse
+from pydantic import BaseModel
+from groq import Groq
 import web_app
 from web_app import app
-from sambot_features import router as features_router
+from sambot_features import router as features_router, CHAT_MODELS
+
+# Replace the basic chat endpoint with a version that honors the model picker.
+app.router.routes[:] = [
+    route for route in app.router.routes
+    if not (getattr(route, "path", None) == "/api/chat" and "POST" in getattr(route, "methods", set()))
+]
+
+class ChatMessage(BaseModel):
+    role: str
+    content: str
+
+class ChatRequest(BaseModel):
+    messages: list[ChatMessage]
+    web_search: bool = False
+    model: str | None = None
+
+@app.post("/api/chat")
+def selected_model_chat(req: ChatRequest):
+    key = os.getenv("GROQ_API_KEY")
+    if not key:
+        return JSONResponse({"error": "GROQ_API_KEY is not configured in Render."}, status_code=503)
+    allowed = {m["id"] for m in CHAT_MODELS}
+    model = req.model if req.model in allowed else os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")
+    try:
+        messages = [{"role": m.role, "content": m.content} for m in req.messages if m.role in ("user", "assistant")][-20:]
+        if not messages:
+            return JSONResponse({"error": "No chat messages were sent."}, status_code=400)
+        context = ""
+        if req.web_search:
+            results = web_app.web_search(messages[-1]["content"])
+            context = "\n\nCURRENT WEB RESULTS:\n" + "\n".join(
+                f"- {x['title']} | {x['url']} | {x['snippet']}" for x in results
+            )
+        system = (
+            "You are Sambot X, a helpful AI assistant. Be accurate, clear, and honest about limitations. "
+            "Help with coding, writing, studying, math, planning, brainstorming, and general tasks. "
+            "Use attached file contents when supplied. If web results are supplied, use them for current information and mention sources naturally."
+        )
+        result = Groq(api_key=key, timeout=45.0, max_retries=1).chat.completions.create(
+            model=model,
+            messages=[{"role": "system", "content": system + context}] + messages,
+            temperature=0.7,
+            max_tokens=1800,
+        )
+        reply = result.choices[0].message.content
+        if not reply:
+            return JSONResponse({"error": "The AI returned an empty reply. Please try again."}, status_code=502)
+        return {"reply": reply, "model": model}
+    except Exception as exc:
+        print(f"SAMBOT_CHAT_ERROR: {type(exc).__name__}: {exc}")
+        return JSONResponse({"error": f"AI request failed ({type(exc).__name__}): {exc}"}, status_code=502)
 
 app.include_router(features_router)
 
-# Add a small model picker and image-analysis control to the existing interface
-# without replacing the desktop app or the existing chat API.
+# Enhance the existing interface while preserving its existing chat history and controls.
 _original_home = next((r.endpoint for r in app.router.routes if getattr(r, "path", None) == "/" and "GET" in getattr(r, "methods", set())), None)
 if _original_home:
     def enhanced_home():
@@ -19,21 +72,35 @@ if _original_home:
 (function(){
   if (window.__sambotEnhancementsLoaded) return;
   window.__sambotEnhancementsLoaded = true;
+  const nativeFetch = window.fetch.bind(window);
+  window.fetch = function(input, init){
+    try {
+      const url = typeof input === 'string' ? input : input.url;
+      if (url && url.endsWith('/api/chat') && init && typeof init.body === 'string') {
+        const body = JSON.parse(init.body);
+        body.model = localStorage.getItem('sambot_model') || '';
+        init = {...init, body: JSON.stringify(body)};
+      }
+    } catch (_) {}
+    return nativeFetch(input, init);
+  };
   const topbar = document.querySelector('.topbar > div:first-child');
   if (topbar) {
     const select = document.createElement('select');
     select.id = 'sambotModelPicker';
     select.title = 'Choose the chat model';
+    select.setAttribute('aria-label','Choose AI model');
     select.style.cssText = 'margin-left:10px;max-width:190px;background:#15181e;color:inherit;border:1px solid #343842;border-radius:8px;padding:7px;font-size:12px';
     select.innerHTML = '<option>Loading models…</option>';
     topbar.appendChild(select);
-    fetch('/api/models').then(r=>r.json()).then(data=>{
+    nativeFetch('/api/models').then(r=>r.json()).then(data=>{
       select.innerHTML = '';
       (data.models||[]).forEach(m=>{
         const o=document.createElement('option');o.value=m.id;o.textContent=m.name;select.appendChild(o);
       });
       select.value=localStorage.getItem('sambot_model')||data.default;
       if(!select.value && select.options.length)select.selectedIndex=0;
+      localStorage.setItem('sambot_model',select.value);
     }).catch(()=>{select.innerHTML='<option value="openai/gpt-oss-120b">Default model</option>'});
     select.addEventListener('change',()=>localStorage.setItem('sambot_model',select.value));
   }
@@ -53,7 +120,7 @@ if _original_home:
         try{
           if(typeof window.add==='function')window.add('user','🖼 Image: '+file.name);
           if(typeof window.add==='function')window.add('assistant','Analyzing image…');
-          const r=await fetch('/api/vision',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({prompt,image_data_url:reader.result})});
+          const r=await nativeFetch('/api/vision',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({prompt,image_data_url:reader.result})});
           const j=await r.json();
           const rows=document.querySelectorAll('#chat .row.assistant');
           const last=rows[rows.length-1];
