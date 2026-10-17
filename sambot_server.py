@@ -1,6 +1,5 @@
 """Render entry point for Sambot X, including optional feature routes."""
 import os
-from fastapi import HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel
 from groq import Groq
@@ -8,7 +7,6 @@ import web_app
 from web_app import app
 from sambot_features import router as features_router, CHAT_MODELS
 
-# Replace the basic chat endpoint with a version that honors the model picker.
 app.router.routes[:] = [
     route for route in app.router.routes
     if not (getattr(route, "path", None) == "/api/chat" and "POST" in getattr(route, "methods", set()))
@@ -46,10 +44,8 @@ def selected_model_chat(req: ChatRequest):
             "Use attached file contents when supplied. If web results are supplied, use them for current information and mention sources naturally."
         )
         result = Groq(api_key=key, timeout=45.0, max_retries=1).chat.completions.create(
-            model=model,
-            messages=[{"role": "system", "content": system + context}] + messages,
-            temperature=0.7,
-            max_tokens=1800,
+            model=model, messages=[{"role": "system", "content": system + context}] + messages,
+            temperature=0.7, max_tokens=1800,
         )
         reply = result.choices[0].message.content
         if not reply:
@@ -61,7 +57,6 @@ def selected_model_chat(req: ChatRequest):
 
 app.include_router(features_router)
 
-# Enhance the existing interface while preserving its existing chat history and controls.
 _original_home = next((r.endpoint for r in app.router.routes if getattr(r, "path", None) == "/" and "GET" in getattr(r, "methods", set())), None)
 if _original_home:
     def enhanced_home():
@@ -87,17 +82,13 @@ if _original_home:
   const topbar = document.querySelector('.topbar > div:first-child');
   if (topbar) {
     const select = document.createElement('select');
-    select.id = 'sambotModelPicker';
-    select.title = 'Choose the chat model';
+    select.id = 'sambotModelPicker'; select.title = 'Choose the chat model';
     select.setAttribute('aria-label','Choose AI model');
     select.style.cssText = 'margin-left:10px;max-width:190px;background:#15181e;color:inherit;border:1px solid #343842;border-radius:8px;padding:7px;font-size:12px';
-    select.innerHTML = '<option>Loading models…</option>';
-    topbar.appendChild(select);
+    select.innerHTML = '<option>Loading models…</option>'; topbar.appendChild(select);
     nativeFetch('/api/models').then(r=>r.json()).then(data=>{
       select.innerHTML = '';
-      (data.models||[]).forEach(m=>{
-        const o=document.createElement('option');o.value=m.id;o.textContent=m.name;select.appendChild(o);
-      });
+      (data.models||[]).forEach(m=>{const o=document.createElement('option');o.value=m.id;o.textContent=m.name;select.appendChild(o)});
       select.value=localStorage.getItem('sambot_model')||data.default;
       if(!select.value && select.options.length)select.selectedIndex=0;
       localStorage.setItem('sambot_model',select.value);
@@ -106,8 +97,7 @@ if _original_home:
   }
   const tools = document.querySelector('.composer .tools');
   if (tools) {
-    const imageBtn = document.createElement('button');
-    imageBtn.className='toolbtn'; imageBtn.textContent='🖼 Analyze image';
+    const imageBtn = document.createElement('button'); imageBtn.className='toolbtn'; imageBtn.textContent='🖼 Analyze image';
     const imageInput=document.createElement('input');imageInput.type='file';imageInput.accept='image/png,image/jpeg,image/webp,image/gif';imageInput.hidden=true;
     imageBtn.onclick=()=>imageInput.click();
     imageInput.onchange=async()=>{
@@ -122,8 +112,7 @@ if _original_home:
           if(typeof window.add==='function')window.add('assistant','Analyzing image…');
           const r=await nativeFetch('/api/vision',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({prompt,image_data_url:reader.result})});
           const j=await r.json();
-          const rows=document.querySelectorAll('#chat .row.assistant');
-          const last=rows[rows.length-1];
+          const rows=document.querySelectorAll('#chat .row.assistant');const last=rows[rows.length-1];
           if(last && last.textContent.includes('Analyzing image'))last.remove();
           if(typeof window.add==='function')window.add('assistant',r.ok?(j.reply||'No response returned.'):('Image analysis error: '+(j.error||r.status)));
         }catch(e){alert('Image analysis failed: '+e.message)}
@@ -137,8 +126,5 @@ if _original_home:
 """
         html = html.replace('</body>', extension + '</body>')
         return HTMLResponse(html)
-    for route in app.router.routes:
-        if getattr(route, "path", None) == "/" and "GET" in getattr(route, "methods", set()):
-            route.endpoint = enhanced_home
-            route.response_class = HTMLResponse
-            break
+    app.router.routes[:] = [r for r in app.router.routes if getattr(r, "path", None) != "/"]
+    app.add_api_route("/", enhanced_home, methods=["GET"], response_class=HTMLResponse)
