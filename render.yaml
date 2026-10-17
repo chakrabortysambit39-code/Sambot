@@ -3,12 +3,15 @@ services:
     name: sambot-x
     runtime: python
     buildCommand: pip install -r requirements-render.txt
-    startCommand: uvicorn web_app:app --host 0.0.0.0 --port $PORT
+    startCommand: uvicorn sambot_server:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
     envVars:
       - key: GROQ_API_KEY
         sync: false
       - key: GROQ_MODEL
         value: openai/gpt-oss-120b
+      - key: GROQ_VISION_MODEL
+        value: meta-llama/llama-4-scout-17b-16e-instruct
       - key: CLOUDFLARE_ACCOUNT_ID
         sync: false
       - key: CLOUDFLARE_API_TOKEN
