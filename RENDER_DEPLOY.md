@@ -34,3 +34,7 @@ If chat returns an API error, open Render's logs and verify the key, the selecte
 ## Current browser features
 
 The Render entry point `sambot_server.py` adds the model picker, image understanding, and streaming chat API on top of `web_app.py`. The browser app supports streaming replies with a Stop button, local chat history, chat import/export, Markdown/code formatting, custom instructions, local memory, file uploads, web search, browser speech input, read-aloud, and optional Cloudflare image generation. Chat history and preferences remain in that browser unless exported; this setup does not include user accounts or cross-device sync.
+
+## Voice mode
+
+The browser UI includes hands-free voice mode using the browser's Web Speech APIs. Use a current desktop Chrome/Edge browser, allow microphone access, and keep the tab open. Voice mode listens for a spoken turn, sends it to the configured Groq model, reads the answer aloud, and resumes listening. The browser's speech recognition and speech synthesis are browser-provided services, not OpenAI real-time voice infrastructure; support and language availability vary by browser. Click **Stop voice** to stop listening and speech. Voice audio is processed by the browser's speech service and chat text is sent to Sambot's configured AI provider.
