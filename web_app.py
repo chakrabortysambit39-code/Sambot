@@ -53,7 +53,7 @@ button,input,textarea{font:inherit}.app{height:100vh;display:flex}.sidebar{width
 <section class="chat" id="chat"></section>
 <div class="composer"><div class="compose">
 <textarea id="box" rows="2" placeholder="Message Sambot X..."></textarea>
-<div class="controls"><div class="tools"><input id="fileInput" type="file" hidden multiple accept=".txt,.md,.csv,.json,.pdf,.docx,.xlsx,.py,.js,.html,.css"><button class="toolbtn" onclick="document.getElementById('fileInput').click()">📎 Files</button><button class="toolbtn" id="webBtn" onclick="toggleWeb()">🌐 Web</button><button class="toolbtn" id="mic" onclick="voice()">🎙 Voice</button></div><div class="tools"><button class="toolbtn send" onclick="send()">Send ➤</button></div></div>
+<div class="controls"><div class="tools"><input id="fileInput" type="file" hidden multiple accept=".txt,.md,.csv,.json,.pdf,.docx,.xlsx,.py,.js,.html,.css"><button class="toolbtn" onclick="document.getElementById('fileInput').click()">📎 Files</button><button class="toolbtn" id="webBtn" onclick="toggleWeb()">🌐 Web</button><button class="toolbtn" id="mic" onclick="voice()">🎙 Voice</button></div><div class="tools"><button class="toolbtn" id="stopBtn" onclick="stopGeneration()" style="display:none">■ Stop</button><button class="toolbtn send" id="sendBtn" onclick="send()">Send ➤</button></div></div>
 <div id="attachments" style="font-size:11px;opacity:.6;padding:4px"></div><div style="text-align:center;font-size:10px;opacity:.35;padding:5px">Enter to send • Shift+Enter for new line • Type “create image …” for images • Web searches current information</div>
 </div></div>
 </section>
@@ -63,7 +63,7 @@ button,input,textarea{font:inherit}.app{height:100vh;display:flex}.sidebar{width
 <div class="modal" id="settings"><div class="panel">
 <h2>⚙ Settings</h2>
 <label>Display name</label><input id="displayName" placeholder="Sambot User">
-<label>About</label><div style="opacity:.55;font-size:12px">SAMBOT X • Groq chat • Cloudflare image generation</div>
+<label>Custom instructions for Sambot</label><textarea id="customInstructions" rows="4" placeholder="How should Sambot respond?"></textarea><label>About</label><div style="opacity:.55;font-size:12px">SAMBOT X • Groq chat • Cloudflare image generation</div>
 <button class="toolbtn" onclick="saveSettings()">Save</button>
 <button class="toolbtn" onclick="closeSettings()">Close</button>
 </div></div>
@@ -95,37 +95,26 @@ function showDeleteChat(id){const s=sessions.find(x=>x.id===id);if(!s)return;con
 function add(role,content,image){ensure();const s=current();if(!s)return;const message={role,content,image};s.messages.push(message);if(role==='user'&&s.title==='New chat')s.title=(content||'New chat').slice(0,36);save();renderChat();chat.scrollTop=chat.scrollHeight;renderHistory()}
 function imageRequest(s){return /\b(create|generate|make|draw|render)\s+(an?\s+)?image\b/i.test(s)||/^\/image\b/i.test(s)}
 function imagePrompt(s){return s.replace(/^\/image\s*/i,'').replace(/^\s*(create|generate|make|draw|render)\s+(an?\s+)?image\s*(of|showing)?\s*/i,'').trim()||s}
+let activeController=null;
+function setGenerating(on){document.getElementById('stopBtn').style.display=on?'inline-block':'none';document.getElementById('sendBtn').style.display=on?'none':'inline-block'}
+function stopGeneration(){if(activeController){activeController.abort();activeController=null}setGenerating(false)}
 async function send(){
-  const text=box.value.trim();
-  if(!text&&!attachedFiles.length)return;
-  box.value="";
-  ensure();
-  const session=current();
-  if(!session){showChatNotice("Could not open a chat session. Click New chat and try again.");return;}
-  if(text&&imageRequest(text)){await generateImage(imagePrompt(text),text);return;}
-  let fileText="";
-  try{
-    session.messages.push({role:"user",content:text||"📎 Attached file(s)"});
-    if(session.title==="New chat"&&text)session.title=text.slice(0,36);
-    save();renderHistory();renderChat();chat.scrollTop=chat.scrollHeight;
-    try{fileText=await uploadFiles();}catch(e){showChatNotice("File upload failed: "+e.message);return;}
-    const finalText=fileText?(text||"Please analyze the attached file(s).")+"\\n\\n[Attached file contents]\\n"+fileText:text;
-    const thinking={role:"assistant",content:"Thinking…"};
-    drawMessage(thinking);
-    const thinkingRow=chat.lastElementChild;
-    if(thinkingRow)thinkingRow.querySelector(".msg")?.classList.add("thinking");
-    const msgs=current().messages.filter(m=>!m.image&&m.content!=="Thinking…").slice(-20).map(m=>({role:m.role,content:m.content}));
-    if(fileText)msgs[msgs.length-1]={role:"user",content:finalText};
-    const response=await fetch("/api/chat",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({messages:msgs,web_search:webEnabled})});
-    let j={};try{j=await response.json()}catch(_){}
-    if(thinkingRow)thinkingRow.remove();
-    const answer=response.ok?(j.reply||j.error||"The AI returned an empty response. Please try again."):(j.detail||j.error||("Server error HTTP "+response.status));
-    add("assistant",answer);
-    renderChat();chat.scrollTop=chat.scrollHeight;
-  }catch(e){
-    const old=chat.querySelector(".thinking")?.closest(".row");if(old)old.remove();
-    showChatNotice("Could not get a reply: "+(e?.message||String(e)));
-  }
+ if(activeController)return;
+ const text=box.value.trim();if(!text&&!attachedFiles.length)return;box.value="";ensure();
+ const session=current();if(!session){showChatNotice("Could not open a chat session. Click New chat and try again.");return}
+ if(text&&imageRequest(text)){await generateImage(imagePrompt(text),text);return}
+ const controller=new AbortController();activeController=controller;setGenerating(true);let assistantMessage=null;
+ try{
+  session.messages.push({role:"user",content:text||"📎 Attached file(s)"});if(session.title==="New chat"&&text)session.title=text.slice(0,36);save();renderHistory();renderChat();chat.scrollTop=chat.scrollHeight;
+  const fileText=await uploadFiles();const finalText=fileText?(text||"Please analyze the attached file(s).")+"\n\n[Attached file contents]\n"+fileText:text;
+  const msgs=current().messages.filter(m=>!m.image&&m.content!=="Thinking…").slice(-20).map(m=>({role:m.role,content:m.content}));if(fileText)msgs[msgs.length-1]={role:"user",content:finalText};
+  const response=await fetch("/api/chat/stream",{method:"POST",headers:{"Content-Type":"application/json"},signal:controller.signal,body:JSON.stringify({messages:msgs,web_search:webEnabled,memory:localStorage.getItem("sambot_memory")||"",instructions:localStorage.getItem("sambot_instructions")||""})});
+  if(!response.ok){let j={};try{j=await response.json()}catch(_){}throw new Error(j.detail||j.error||("Server error HTTP "+response.status))}
+  assistantMessage={role:"assistant",content:""};session.messages.push(assistantMessage);save();renderChat();const row=chat.lastElementChild,msgEl=row?.querySelector(".msg"),reader=response.body.getReader(),decoder=new TextDecoder();let buffer="",failed="";
+  while(true){const part=await reader.read();if(part.done)break;buffer+=decoder.decode(part.value,{stream:true});const events=buffer.split("\n\n");buffer=events.pop()||"";for(const event of events){const line=event.split("\n").find(x=>x.startsWith("data: "));if(!line)continue;let data;try{data=JSON.parse(line.slice(6))}catch(_){continue}if(data.token){assistantMessage.content+=data.token;if(msgEl)msgEl.innerHTML=renderMarkdown(assistantMessage.content);chat.scrollTop=chat.scrollHeight}if(data.error)failed=data.error}if(failed)throw new Error(failed);save()}
+  if(!assistantMessage.content)assistantMessage.content="The AI returned an empty response. Please try again.";save();renderChat();chat.scrollTop=chat.scrollHeight;
+ }catch(e){if(e.name==="AbortError"){if(assistantMessage&&assistantMessage.content){assistantMessage.content+="\n\n[Generation stopped]";save();renderChat()}}else{if(assistantMessage&&!assistantMessage.content){const s=current();if(s)s.messages=s.messages.filter(m=>m!==assistantMessage)}showChatNotice("Could not get a reply: "+(e?.message||String(e)))}}
+ finally{if(activeController===controller)activeController=null;setGenerating(false)}
 }
 function showChatNotice(message){
   try{add("assistant",message)}catch(_){
@@ -141,9 +130,9 @@ function voice(){const R=window.SpeechRecognition||window.webkitSpeechRecognitio
 function speakText(t){if('speechSynthesis'in window){speechSynthesis.cancel();speechSynthesis.speak(new SpeechSynthesisUtterance(t))}}
 function toggleTheme(){theme=theme==='dark'?'light':'dark';localStorage.setItem('sambot_theme',theme);document.body.classList.toggle('light',theme==='light')}
 function toggleSidebar(){sidebar.classList.toggle('open')}
-function openSettings(){document.getElementById('settings').classList.add('show');document.getElementById('displayName').value=localStorage.getItem('sambot_name')||'Sambot User'}
+function openSettings(){document.getElementById('settings').classList.add('show');document.getElementById('displayName').value=localStorage.getItem('sambot_name')||'Sambot User';document.getElementById('customInstructions').value=localStorage.getItem('sambot_instructions')||''}
 function closeSettings(){document.getElementById('settings').classList.remove('show')}
-function saveSettings(){localStorage.setItem('sambot_name',document.getElementById('displayName').value||'Sambot User');closeSettings()}
+function saveSettings(){localStorage.setItem('sambot_name',document.getElementById('displayName').value||'Sambot User');localStorage.setItem('sambot_instructions',document.getElementById('customInstructions').value||'');closeSettings();showChatNotice('Settings saved. Custom instructions will be used in replies.')}
 function downloadJSON(data,name){const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000)}
 function exportChats(){downloadJSON({format:'sambot-chats-v1',exportedAt:new Date().toISOString(),sessions,currentId},'sambot-chats.json')}
 function importChatsFile(file){const reader=new FileReader();reader.onload=()=>{try{const data=JSON.parse(reader.result);const incoming=Array.isArray(data)?data:data.sessions;if(!Array.isArray(incoming))throw new Error('This file does not contain Sambot chat history.');const valid=incoming.filter(s=>s&&Array.isArray(s.messages)).map(s=>({id:Date.now().toString()+Math.random().toString(16).slice(2),title:typeof s.title==='string'?s.title:'Imported chat',messages:s.messages.filter(m=>m&&['user','assistant'].includes(m.role)&&typeof m.content==='string').map(m=>({role:m.role,content:m.content,...(typeof m.image==='string'?{image:m.image}:{})}))}));if(!valid.length)throw new Error('No valid chats were found in this file.');sessions=[...valid,...sessions];currentId=valid[0].id;save();renderHistory();renderChat();alert('Imported '+valid.length+' chat(s).')}catch(e){alert('Could not import chats: '+e.message)}};reader.readAsText(file)}
