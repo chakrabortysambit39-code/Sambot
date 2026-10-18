@@ -68,7 +68,7 @@ def stream_chat(req: ChatRequest):
             print("SAMBOT_STREAM_OK: reply streamed")
         except Exception as exc:
             print(f"SAMBOT_STREAM_ERROR: {type(exc).__name__}: {exc}")
-            yield "data: " + json.dumps({"error": f"AI stream failed ({type(exc).__name__}): {exc"}) + "\\n\\n"
+            yield "data: " + json.dumps({"error": f"AI stream failed ({type(exc).__name__}): {exc}"}) + "\\n\\n"
     return StreamingResponse(events(), media_type="text/event-stream", headers={
         "Cache-Control": "no-cache", "X-Accel-Buffering": "no", "Connection": "keep-alive"
     })
@@ -123,7 +123,7 @@ if _original_home:
   window.fetch = function(input, init){
     try {
       const url = typeof input === 'string' ? input : input.url;
-      if (url && url.endsWith('/api/chat') && init && typeof init.body === 'string') {
+      if (url && (url.endsWith('/api/chat') || url.endsWith('/api/chat/stream')) && init && typeof init.body === 'string') {
         const body = JSON.parse(init.body);
         body.model = localStorage.getItem('sambot_model') || '';
         init = {...init, body: JSON.stringify(body)};
