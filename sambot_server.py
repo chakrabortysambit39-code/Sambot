@@ -20,6 +20,8 @@ class ChatRequest(BaseModel):
     messages: list[ChatMessage]
     web_search: bool = False
     model: str | None = None
+    memory: str | None = None
+    instructions: str | None = None
 
 @app.post("/api/chat/stream")
 def stream_chat(req: ChatRequest):
@@ -36,7 +38,7 @@ def stream_chat(req: ChatRequest):
     context = ""
     if req.web_search:
         results = web_app.web_search(messages[-1]["content"])
-        context = "\\n\\nCURRENT WEB RESULTS:\\n" + "\\n".join(
+        context = "\n\nCURRENT WEB RESULTS:\n" + "\n".join(
             f"- {x['title']} | {x['url']} | {x['snippet']}" for x in results
         )
     memory = (req.memory or "").strip()[:4000]
@@ -48,9 +50,9 @@ def stream_chat(req: ChatRequest):
         "Format answers clearly with Markdown when useful. Never claim to have used tools or sources you did not use."
     )
     if memory:
-        system += "\\n\\nUSER-PROVIDED MEMORY (use only when relevant):\\n" + memory
+        system += "\n\nUSER-PROVIDED MEMORY (use only when relevant):\n" + memory
     if instructions:
-        system += "\\n\\nUSER CUSTOM INSTRUCTIONS:\\n" + instructions
+        system += "\n\nUSER CUSTOM INSTRUCTIONS:\n" + instructions
     def events():
         try:
             stream = Groq(api_key=key, timeout=90.0, max_retries=1).chat.completions.create(
@@ -63,7 +65,7 @@ def stream_chat(req: ChatRequest):
                 delta = chunk.choices[0].delta
                 piece = getattr(delta, "content", None)
                 if piece:
-                    yield "data: " + json.dumps({"token": piece}, ensure_ascii=False) + "\\n\\n"
+                    yield "data: " + json.dumps({"token": piece}, ensure_ascii=False) + "\n\n"
             yield "data: " + json.dumps({"done": True, "model": model}) + "\\n\\n"
             print("SAMBOT_STREAM_OK: reply streamed")
         except Exception as exc:
