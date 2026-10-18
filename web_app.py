@@ -175,7 +175,7 @@ def home():
 
 @app.get("/health")
 def health():
-    return {"ok":True,"groq_configured":bool(os.getenv("GROQ_API_KEY")),"cloudflare_configured":bool(os.getenv("CLOUDFLARE_ACCOUNT_ID") and os.getenv("CLOUDFLARE_API_TOKEN")),"features":["chat","streaming_chat","stop_generation","model_selection","image_generation","image_understanding","web_search","file_uploads","markdown","voice_input","read_aloud","local_history","import_export","custom_instructions","local_memory"]}
+    return {"ok":True,"groq_configured":bool(os.getenv("GROQ_API_KEY")),"cloudflare_configured":bool(os.getenv("CLOUDFLARE_ACCOUNT_ID") and os.getenv("CLOUDFLARE_API_TOKEN")),"features":["chat","streaming_chat","stop_generation","model_selection","image_generation","image_understanding","web_search","file_uploads","markdown","voice_input","voice_mode","read_aloud","local_history","import_export","custom_instructions","local_memory"]}
 
 def extract_file_text(file, raw):
     name=(file.filename or "").lower()
