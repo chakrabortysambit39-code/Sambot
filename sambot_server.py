@@ -1,6 +1,6 @@
 """Render entry point for Sambot X, including optional feature routes."""
 import os
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from pydantic import BaseModel
 from groq import Groq
 import web_app
@@ -20,6 +20,58 @@ class ChatRequest(BaseModel):
     messages: list[ChatMessage]
     web_search: bool = False
     model: str | None = None
+
+@app.post("/api/chat/stream")
+def stream_chat(req: ChatRequest):
+    """Stream assistant text as Server-Sent Events for the browser chat UI."""
+    import json
+    key = os.getenv("GROQ_API_KEY")
+    if not key:
+        return JSONResponse({"error": "GROQ_API_KEY is not configured in Render."}, status_code=503)
+    allowed = {m["id"] for m in CHAT_MODELS}
+    model = req.model if req.model in allowed else os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")
+    messages = [{"role": m.role, "content": m.content} for m in req.messages if m.role in ("user", "assistant")][-20:]
+    if not messages:
+        return JSONResponse({"error": "No chat messages were sent."}, status_code=400)
+    context = ""
+    if req.web_search:
+        results = web_app.web_search(messages[-1]["content"])
+        context = "\\n\\nCURRENT WEB RESULTS:\\n" + "\\n".join(
+            f"- {x['title']} | {x['url']} | {x['snippet']}" for x in results
+        )
+    memory = (req.memory or "").strip()[:4000]
+    instructions = (req.instructions or "").strip()[:4000]
+    system = (
+        "You are Sambot X, a helpful AI assistant. Be accurate, clear, and honest about limitations. "
+        "Help with coding, writing, studying, math, planning, brainstorming, and general tasks. "
+        "Use attached file contents when supplied. If web results are supplied, use them for current information and mention sources naturally. "
+        "Format answers clearly with Markdown when useful. Never claim to have used tools or sources you did not use."
+    )
+    if memory:
+        system += "\\n\\nUSER-PROVIDED MEMORY (use only when relevant):\\n" + memory
+    if instructions:
+        system += "\\n\\nUSER CUSTOM INSTRUCTIONS:\\n" + instructions
+    def events():
+        try:
+            stream = Groq(api_key=key, timeout=90.0, max_retries=1).chat.completions.create(
+                model=model, messages=[{"role": "system", "content": system + context}] + messages,
+                temperature=0.7, max_tokens=4000, stream=True,
+            )
+            for chunk in stream:
+                if not chunk.choices:
+                    continue
+                delta = chunk.choices[0].delta
+                piece = getattr(delta, "content", None)
+                if piece:
+                    yield "data: " + json.dumps({"token": piece}, ensure_ascii=False) + "\\n\\n"
+            yield "data: " + json.dumps({"done": True, "model": model}) + "\\n\\n"
+            print("SAMBOT_STREAM_OK: reply streamed")
+        except Exception as exc:
+            print(f"SAMBOT_STREAM_ERROR: {type(exc).__name__}: {exc}")
+            yield "data: " + json.dumps({"error": f"AI stream failed ({type(exc).__name__}): {exc"}) + "\\n\\n"
+    return StreamingResponse(events(), media_type="text/event-stream", headers={
+        "Cache-Control": "no-cache", "X-Accel-Buffering": "no", "Connection": "keep-alive"
+    })
 
 @app.post("/api/chat")
 def selected_model_chat(req: ChatRequest):
