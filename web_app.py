@@ -56,7 +56,7 @@ button,input,textarea{font:inherit}.app{height:100vh;display:flex}.sidebar{width
 <section class="chat" id="chat"></section>
 <div class="composer"><div class="compose">
 <textarea id="box" rows="2" placeholder="Message Sambot X..."></textarea>
-<div class="controls"><div class="tools"><input id="fileInput" type="file" hidden multiple accept=".txt,.md,.csv,.json,.pdf,.docx,.xlsx,.py,.js,.html,.css"><button class="toolbtn" onclick="document.getElementById('fileInput').click()">📎 Files</button><button class="toolbtn" id="webBtn" onclick="toggleWeb()">🌐 Web</button><button class="toolbtn" id="mic" onclick="voice()">🎙 Voice input</button><button class="toolbtn" id="voiceModeBtn" onclick="startVoiceMode()">🎧 Voice mode</button></div><div class="tools"><button class="toolbtn" id="stopBtn" onclick="stopGeneration()" style="display:none">■ Stop</button><button class="toolbtn send" id="sendBtn" onclick="send()">Send ➤</button></div></div>
+<div class="controls"><div class="tools"><input id="fileInput" type="file" hidden multiple accept=".txt,.md,.csv,.json,.pdf,.docx,.xlsx,.py,.js,.html,.css"><button class="toolbtn" onclick="document.getElementById('fileInput').click()">📎 Files</button><button class="toolbtn" id="webBtn" onclick="toggleWeb()">🌐 Web</button><button class="toolbtn" id="dataAnalysisBtn" onclick="toggleDataAnalysis()" title="Analyze attached CSV, spreadsheet, or table">📊 Analyze data</button><button class="toolbtn" id="mic" onclick="voice()">🎙 Voice input</button><button class="toolbtn" id="voiceModeBtn" onclick="startVoiceMode()">🎧 Voice mode</button></div><div class="tools"><button class="toolbtn" id="stopBtn" onclick="stopGeneration()" style="display:none">■ Stop</button><button class="toolbtn send" id="sendBtn" onclick="send()">Send ➤</button></div></div>
 <div id="attachments" style="font-size:11px;opacity:.6;padding:4px"></div><div id="voiceStatus" aria-live="polite" style="font-size:11px;opacity:.65;padding:2px 4px"></div><div style="text-align:center;font-size:10px;opacity:.35;padding:5px">Enter to send • Shift+Enter for new line • Type “create image …” for images • Web searches current information</div>
 </div></div>
 </section>
@@ -71,7 +71,7 @@ button,input,textarea{font:inherit}.app{height:100vh;display:flex}.sidebar{width
 <button class="toolbtn" onclick="closeSettings()">Close</button>
 </div></div>
 
-<script>let webEnabled=false,attachedFiles=[];
+<script>let webEnabled=false,dataAnalysisEnabled=false,attachedFiles=[];
 const box=document.getElementById('box'),chat=document.getElementById('chat'),historyEl=document.getElementById('history'),sidebar=document.getElementById('sidebar');
 let sessions=[];try{const stored=JSON.parse(localStorage.getItem('sambot_sessions')||'[]');sessions=Array.isArray(stored)?stored.filter(s=>s&&typeof s==='object'&&Array.isArray(s.messages)).map(s=>({id:String(s.id||('chat-'+Date.now()+'-'+Math.random())),title:typeof s.title==='string'?s.title:'New chat',messages:s.messages.filter(m=>m&&typeof m==='object'&&['user','assistant'].includes(m.role)).map(m=>({role:m.role,content:typeof m.content==='string'?m.content:'',...(typeof m.image==='string'?{image:m.image}:{})}))})):[]}catch(e){console.warn('SAMBOT_HISTORY_RECOVERY',e);sessions=[];try{localStorage.removeItem('sambot_sessions')}catch(_){}}let currentId=localStorage.getItem('sambot_current')||'';
 let theme=localStorage.getItem('sambot_theme')||'dark';
@@ -109,7 +109,8 @@ async function send(){
  const controller=new AbortController();activeController=controller;setGenerating(true);let assistantMessage=null;
  try{
   session.messages.push({role:"user",content:text||"📎 Attached file(s)"});if(session.title==="New chat"&&text)session.title=text.slice(0,36);save();renderHistory();renderChat();chat.scrollTop=chat.scrollHeight;
-  const fileText=await uploadFiles();const finalText=fileText?(text||"Please analyze the attached file(s).")+"\n\n[Attached file contents]\n"+fileText:text;
+  const fileText=await uploadFiles();let finalText=fileText?(text||"Please analyze the attached file(s).")+"\n\n[Attached file contents]\n"+fileText:text;
+  if(dataAnalysisEnabled){if(!fileText)throw new Error("Attach a CSV, spreadsheet, or text file first, then enable Analyze data.");finalText="DATA ANALYSIS REQUEST: Analyze the supplied dataset carefully. Identify columns and data types, row count, missing values, useful descriptive statistics for numeric columns, category counts for categorical columns, notable trends/outliers, and answer the user's specific question. Show calculations where possible, clearly state assumptions, and do not invent values. Use Markdown tables.\n\nUSER QUESTION: "+(text||"Summarize and analyze this dataset.")+"\n\nDATA:\n"+fileText}
   const msgs=current().messages.filter(m=>!m.image&&m.content!=="Thinking…").slice(-20).map(m=>({role:m.role,content:m.content}));if(fileText)msgs[msgs.length-1]={role:"user",content:finalText};
   const response=await fetch("/api/chat/stream",{method:"POST",headers:{"Content-Type":"application/json"},signal:controller.signal,body:JSON.stringify({messages:msgs,web_search:webEnabled,memory:localStorage.getItem("sambot_memory")||"",instructions:localStorage.getItem("sambot_instructions")||""})});
   if(!response.ok){let j={};try{j=await response.json()}catch(_){}throw new Error(j.detail||j.error||("Server error HTTP "+response.status))}
@@ -163,6 +164,7 @@ box.addEventListener("paste",e=>{
   }
 });
 function toggleWeb(){webEnabled=!webEnabled;document.getElementById("webBtn").style.background=webEnabled?"#2c3039":""}
+function toggleDataAnalysis(){dataAnalysisEnabled=!dataAnalysisEnabled;const b=document.getElementById('dataAnalysisBtn');b.style.background=dataAnalysisEnabled?'#155e75':'';b.setAttribute('aria-pressed',String(dataAnalysisEnabled));showChatNotice(dataAnalysisEnabled?'Data analysis mode on: attach a CSV or spreadsheet and ask a question.':'Data analysis mode off.')}
 function toggleMemory(){const old=localStorage.getItem("sambot_memory")||"";const value=prompt("What should Sambot remember? (stored only in this browser)",old);if(value!==null)localStorage.setItem("sambot_memory",value)}
 async function uploadFiles(){if(!attachedFiles.length)return "";const fd=new FormData();attachedFiles.forEach(f=>fd.append("files",f));const r=await fetch("/api/files",{method:"POST",body:fd});const j=await r.json();if(!r.ok)throw new Error(j.error||"File upload failed");attachedFiles=[];document.getElementById("fileInput").value="";document.getElementById("attachments").textContent="";return j.text||""}
 box.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send()}})
