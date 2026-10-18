@@ -7,7 +7,7 @@ This repository contains both a desktop assistant and a browser-based app. For R
 - **Service type:** Web Service
 - **Runtime:** Python
 - **Build command:** `pip install -r requirements-render.txt`
-- **Start command:** `uvicorn web_app:app --host 0.0.0.0 --port $PORT`
+- **Start command:** `uvicorn sambot_server:app --host 0.0.0.0 --port $PORT`
 - **Health check path:** `/health`
 
 The checked-in `render.yaml` contains these web-service settings, so you can also use Render's Blueprint flow to create the service from the repository.
@@ -30,3 +30,7 @@ The current web interface stores chat history and its simple memory in the brows
 4. Open the service root URL and send a test message.
 
 If chat returns an API error, open Render's logs and verify the key, the selected model, and the HTTP status returned by Groq. The repository's current file upload endpoint supports extracting text from TXT, Markdown, CSV, JSON, Python, JavaScript, HTML, CSS, PDF, DOCX, and XLSX files; it does not perform OCR on scanned images or PDFs.
+
+## Current browser features
+
+The Render entry point `sambot_server.py` adds the model picker, image understanding, and streaming chat API on top of `web_app.py`. The browser app supports streaming replies with a Stop button, local chat history, chat import/export, Markdown/code formatting, custom instructions, local memory, file uploads, web search, browser speech input, read-aloud, and optional Cloudflare image generation. Chat history and preferences remain in that browser unless exported; this setup does not include user accounts or cross-device sync.
