@@ -15,6 +15,9 @@ class ChatMessage(BaseModel):
 class ChatRequest(BaseModel):
     messages: list[ChatMessage]
     web_search: bool = False
+    model: str | None = None
+    memory: str | None = None
+    instructions: str | None = None
 
 class ImageRequest(BaseModel):
     prompt: str
@@ -252,6 +255,42 @@ def image(req: ImageRequest):
         return {"error":"Cloudflare image generation timed out. Please try again."}
     except Exception as e:
         return {"error":f"Cloudflare image generation failed: {type(e).__name__}: {e}"}
+
+@app.post("/api/chat/stream")
+def stream_chat(req: ChatRequest):
+    import json
+    from fastapi.responses import StreamingResponse
+    key = os.getenv("GROQ_API_KEY")
+    if not key:
+        return JSONResponse({"error": "GROQ_API_KEY is not configured in Render."}, status_code=503)
+    messages = [{"role": m.role, "content": m.content} for m in req.messages if m.role in ("user", "assistant")][-20:]
+    if not messages:
+        return JSONResponse({"error": "No chat messages were sent."}, status_code=400)
+    context = ""
+    if req.web_search:
+        results = web_search(messages[-1]["content"])
+        context = "\n\nCURRENT WEB RESULTS:\n" + "\n".join(f"- {x['title']} | {x['url']} | {x['snippet']}" for x in results)
+    system = "You are Sambot X, a helpful AI assistant. Be accurate, clear, and honest. Use Markdown when useful."
+    if req.memory:
+        system += "\n\nUSER MEMORY:\n" + req.memory.strip()[:4000]
+    if req.instructions:
+        system += "\n\nUSER CUSTOM INSTRUCTIONS:\n" + req.instructions.strip()[:4000]
+    model = req.model or os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")
+    def events():
+        try:
+            stream = Groq(api_key=key, timeout=90.0, max_retries=1).chat.completions.create(
+                model=model, messages=[{"role": "system", "content": system + context}] + messages,
+                temperature=0.7, max_tokens=4000, stream=True)
+            for chunk in stream:
+                if chunk.choices:
+                    piece = getattr(chunk.choices[0].delta, "content", None)
+                    if piece:
+                        yield "data: " + json.dumps({"token": piece}, ensure_ascii=False) + "\n\n"
+            yield "data: " + json.dumps({"done": True, "model": model}) + "\n\n"
+        except Exception as exc:
+            print(f"SAMBOT_STREAM_ERROR: {type(exc).__name__}: {exc}")
+            yield "data: " + json.dumps({"error": f"AI stream failed ({type(exc).__name__}): {exc}"}) + "\n\n"
+    return StreamingResponse(events(), media_type="text/event-stream", headers={"Cache-Control":"no-cache","X-Accel-Buffering":"no"})
 
 @app.post("/api/chat")
 def chat(req: ChatRequest):
