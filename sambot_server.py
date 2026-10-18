@@ -66,11 +66,11 @@ def stream_chat(req: ChatRequest):
                 piece = getattr(delta, "content", None)
                 if piece:
                     yield "data: " + json.dumps({"token": piece}, ensure_ascii=False) + "\n\n"
-            yield "data: " + json.dumps({"done": True, "model": model}) + "\\n\\n"
+            yield "data: " + json.dumps({"done": True, "model": model}) + "\n\n"
             print("SAMBOT_STREAM_OK: reply streamed")
         except Exception as exc:
             print(f"SAMBOT_STREAM_ERROR: {type(exc).__name__}: {exc}")
-            yield "data: " + json.dumps({"error": f"AI stream failed ({type(exc).__name__}): {exc}"}) + "\\n\\n"
+            yield "data: " + json.dumps({"error": f"AI stream failed ({type(exc).__name__}): {exc}"}) + "\n\n"
     return StreamingResponse(events(), media_type="text/event-stream", headers={
         "Cache-Control": "no-cache", "X-Accel-Buffering": "no", "Connection": "keep-alive"
     })
