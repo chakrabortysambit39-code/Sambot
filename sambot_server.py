@@ -79,7 +79,7 @@ def stream_chat(req: ChatRequest, request: Request, authorization: str | None = 
     })
 
 @app.post("/api/chat")
-def selected_model_chat(req: ChatRequest, authorization: str | None = None):
+def selected_model_chat(req: ChatRequest, request: Request, authorization: str | None = Header(default=None)):
     record_usage(authorization)
     key = os.getenv("GROQ_API_KEY")
     if not key:
