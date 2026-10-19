@@ -108,6 +108,30 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
  html{scroll-behavior:auto}
  *,*:before,*:after{animation-duration:.01ms!important;animation-iteration-count:1!important;scroll-behavior:auto!important;transition-duration:.01ms!important}
 }
+/* Sidebar cleanup */
+.sidebar{width:268px;min-width:268px;max-width:268px;padding:12px 10px 8px;gap:0}
+.history{flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:3px 0 10px}
+.sidebottom{flex:0 0 auto;max-height:none;overflow:visible;border-top:1px solid #252831;padding-top:7px;background:transparent}
+.side-tools{border-radius:10px;overflow:hidden}
+.side-tools summary{list-style:none;cursor:pointer;padding:10px 9px;border-radius:9px;font-size:13px;color:#c9ced8;user-select:none}
+.side-tools summary::-webkit-details-marker{display:none}
+.side-tools summary:after{content:'⌄';float:right;color:#828b9b}
+.side-tools[open] summary:after{content:'⌃'}
+.side-tools summary:hover{background:#1b1f27}
+.side-tools-list{max-height:34vh;overflow:auto;padding:3px 0 5px;overscroll-behavior:contain}
+.side-tools-list .sidebtn{padding:8px 10px;font-size:12px;color:#b8bfcb}
+.profile{border-top:1px solid #252831;margin-top:5px;padding:9px 6px 5px;flex:0 0 auto}
+.chat{padding:24px clamp(14px,3vw,36px) 178px}
+.row{margin:18px 0}
+.wrap{max-width:min(800px,94%)}
+.msg{padding:15px 17px;border-radius:16px;line-height:1.7}
+.assistant .msg{background:#14161b}
+.user .msg{background:#242832}
+.chat::-webkit-scrollbar,.history::-webkit-scrollbar,.side-tools-list::-webkit-scrollbar{width:6px}
+.chat::-webkit-scrollbar-thumb,.history::-webkit-scrollbar-thumb,.side-tools-list::-webkit-scrollbar-thumb{background:#3b414d;border-radius:8px}
+.composer{left:268px;padding:10px 16px 14px;background:linear-gradient(transparent,#08090c 30%)}
+.compose{border-radius:20px;width:min(850px,100%)}
+@media(max-width:760px){.sidebar{width:280px;min-width:280px;max-width:280px}.composer{left:0}.side-tools-list{max-height:30vh}}
 </style>
 </head>
 <body>
@@ -119,10 +143,9 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
 <div class="history-title">CHAT HISTORY</div>
 <div class="history" id="history"></div>
 <div class="sidebottom">
-<button class="sidebtn" onclick="openSettings()">⚙ Settings</button>
-<button class="sidebtn" onclick="exportChats()">⇩ Export chats</button><button class="sidebtn" onclick="openCalculator()">🧮 Calculator</button><button class="sidebtn" onclick="showCapabilities()">🧰 Capabilities</button><button class="sidebtn" onclick="exportCurrentChatMarkdown()">⇩ Export current chat (.md)</button><button class="sidebtn" onclick="document.getElementById('importChatsInput').click()">⇧ Import chats</button><input id="importChatsInput" type="file" accept=".json,application/json" hidden><button class="sidebtn" onclick="clearAllChats()">🗑 Clear all chats</button><button class="sidebtn" onclick="toggleMemory()">🧠 Memory</button>
-<button class="sidebtn" onclick="toggleTheme()">☼ Appearance</button>
-<div class="profile"><div class="avatar">S</div><div><b>Sambot User</b><div style="font-size:10px;opacity:.4">Local session</div></div></div></div>
+<details class="side-tools"><summary>⚙ Tools & settings</summary><div class="side-tools-list">
+<button class="sidebtn" onclick="openSettings()">Settings</button><button class="sidebtn" onclick="exportChats()">Export chats</button><button class="sidebtn" onclick="openCalculator()">Calculator</button><button class="sidebtn" onclick="showCapabilities()">Capabilities</button><button class="sidebtn" onclick="exportCurrentChatMarkdown()">Export current chat (.md)</button><button class="sidebtn" onclick="document.getElementById('importChatsInput').click()">Import chats</button><input id="importChatsInput" type="file" accept=".json,application/json" hidden><button class="sidebtn" onclick="clearAllChats()">Clear all chats</button><button class="sidebtn" onclick="toggleMemory()">Memory</button><button class="sidebtn" onclick="toggleTheme()">Appearance</button>
+</div></details><div class="profile"><div class="avatar">S</div><div><b>Sambot X</b><div style="font-size:10px;opacity:.55">AI workspace · local chats</div></div></div></div>
 </aside>
 <section class="main">
 <header class="topbar">
