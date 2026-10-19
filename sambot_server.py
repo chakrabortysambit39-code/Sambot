@@ -204,6 +204,118 @@ if _original_home:
   const topActions=document.querySelector('.top-actions');
   if(topActions){const pdf=document.createElement('button');pdf.className='iconbtn';pdf.textContent='⤓ Export PDF';pdf.title='Print or save the current chat as PDF';pdf.onclick=()=>window.print();topActions.appendChild(pdf);}
 
+
+  // Premium visual layer: responsive layout, welcome actions, and command palette.
+  const premiumStyle=document.createElement('style');
+  premiumStyle.textContent=`
+    :root{color-scheme:dark}
+    body{background:radial-gradient(ellipse at 52% -20%,#202b42 0%,#0b0d12 48%,#08090c 78%)!important}
+    .sidebar{background:rgba(12,14,19,.94)!important;backdrop-filter:blur(18px);border-right-color:#292d38!important}
+    .brand{letter-spacing:.2px;padding:13px 10px 17px!important;font-size:20px!important}
+    .brand:after{content:'  •';color:#78a9ff;font-size:12px}
+    .new{background:linear-gradient(135deg,#222834,#171a21)!important;border-color:#41495a!important;transition:transform .16s,border-color .16s}
+    .new:hover,.sidebtn:hover,.toolbtn:hover,.iconbtn:hover{border-color:#66738b!important;transform:translateY(-1px)}
+    .sidebtn,.chatitem,.toolbtn,.iconbtn{transition:background .16s,border-color .16s,transform .16s}
+    .topbar{background:rgba(8,9,12,.72);backdrop-filter:blur(16px);border-bottom-color:#272b34!important}
+    .model{letter-spacing:.2px}
+    .status{padding:4px 7px;border:1px solid #2c3441;border-radius:99px;color:#9db4d7;opacity:1!important}
+    .chat{scroll-behavior:smooth;padding-top:30px!important}
+    .empty{max-width:800px!important;margin:clamp(45px,12vh,120px) auto!important;padding:0 10px}
+    .empty h1{font-size:clamp(30px,4vw,46px)!important;letter-spacing:-1.5px;background:linear-gradient(100deg,#fff 15%,#b8c9ed 65%,#8fa8d5);-webkit-background-clip:text;background-clip:text;color:transparent;margin-bottom:13px!important}
+    .empty p{font-size:15px;line-height:1.7;opacity:.68!important}
+    .sambot-greeting{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:30px auto 0;max-width:690px;text-align:left}
+    .sambot-prompt-card{border:1px solid #303746;background:linear-gradient(135deg,rgba(28,33,44,.88),rgba(17,20,27,.9));color:#f3f5fa;border-radius:15px;padding:15px;min-height:88px;cursor:pointer;display:flex;flex-direction:column;gap:7px;transition:transform .16s,border-color .16s,background .16s}
+    .sambot-prompt-card:hover{transform:translateY(-2px);border-color:#7183a3;background:#252c3a}
+    .sambot-prompt-card b{font-size:13px}.sambot-prompt-card span{font-size:12px;color:#aab3c3;line-height:1.45}
+    .composer{background:linear-gradient(transparent,rgba(8,9,12,.96) 25%)!important}
+    .compose{border-radius:22px!important;background:rgba(22,25,32,.96)!important;border-color:#3b414f!important;box-shadow:0 15px 50px #0007,0 0 0 1px #ffffff04!important;backdrop-filter:blur(18px)}
+    .compose:focus-within{border-color:#65748e!important;box-shadow:0 15px 50px #0008,0 0 0 3px #7895c51a!important}
+    .compose textarea{font-size:15px!important;line-height:1.55}
+    .send{background:#f4f5f7!important;color:#111!important;border-radius:10px!important}
+    .msg{border:1px solid #ffffff08;box-shadow:0 2px 8px #0001}
+    .assistant .msg{background:rgba(18,21,28,.88)!important}
+    .user .msg{background:#292e39!important;border-color:#414858}
+    .row{animation:sambotFadeIn .2s ease-out}
+    @keyframes sambotFadeIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}
+    .mini{transition:all .15s}.mini:hover{color:#fff;border-color:#596273}
+    #sambotCommandOverlay{position:fixed;inset:0;background:#000b;backdrop-filter:blur(8px);z-index:10010;display:none;align-items:flex-start;justify-content:center;padding:14vh 16px 20px}
+    #sambotCommandOverlay.open{display:flex}
+    #sambotCommandBox{width:min(600px,100%);background:#171a21;border:1px solid #424958;border-radius:17px;box-shadow:0 30px 100px #000a;overflow:hidden}
+    #sambotCommandInput{width:100%;padding:17px 18px;background:transparent;border:0;border-bottom:1px solid #303541;color:#fff;outline:none;font-size:15px}
+    #sambotCommandResults{padding:8px;max-height:48vh;overflow:auto}
+    .sambot-command-item{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px;border-radius:10px;cursor:pointer;color:#eee;font-size:13px}
+    .sambot-command-item:hover,.sambot-command-item.active{background:#2a303c}
+    .sambot-command-item small{color:#9da5b4}
+    #sambotCommandHint{padding:9px 13px;border-top:1px solid #303541;color:#8e96a5;font-size:11px}
+    .sambot-shortcut{font-size:10px;color:#aab2c0;border:1px solid #424958;border-radius:5px;padding:2px 5px}
+    .light{background:#f7f8fb!important;color:#16181d!important}
+    .light .sidebar{background:rgba(249,250,252,.95)!important}
+    .light .topbar{background:rgba(255,255,255,.85)!important}
+    .light .empty h1{background:linear-gradient(100deg,#202633,#536a91);-webkit-background-clip:text;background-clip:text}
+    .light .sambot-prompt-card{background:#fff;color:#17191e;border-color:#e0e3e9}
+    .light .sambot-prompt-card span{color:#626b7a}
+    .light .compose{background:#fff!important;border-color:#d9dde5!important}
+    .light .assistant .msg{background:#fff!important;color:#17191e;border-color:#e5e7eb}
+    .light #sambotCommandBox{background:#fff;color:#111;border-color:#ddd}
+    .light #sambotCommandInput{color:#111}
+    .light .sambot-command-item{color:#111}
+    @media(max-width:760px){.sambot-greeting{grid-template-columns:1fr;gap:8px;margin-top:22px}.sambot-prompt-card{min-height:68px;padding:12px}.empty{margin:8vh auto!important}.chat{padding:20px 12px 155px!important}.wrap{max-width:94%}.controls{align-items:center}.tools{flex-wrap:wrap}.toolbtn{padding:7px 8px;font-size:11px}.top-actions .iconbtn{padding:7px 8px}.status{display:none}}
+    @media(prefers-reduced-motion:reduce){*,*:before,*:after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
+  `;
+  document.head.appendChild(premiumStyle);
+  const greeting=document.querySelector('.empty');
+  if(greeting&&!greeting.querySelector('.sambot-greeting')){
+    const cards=document.createElement('div');cards.className='sambot-greeting';
+    const suggestions=[
+      ['✦','Build something','Plan an impressive app idea and build it step by step.'],
+      ['⌘','Code & debug','Help me debug code and explain the fix clearly.'],
+      ['◈','Learn anything','Teach me a difficult topic using simple examples.'],
+      ['▤','Analyze a file','I want to analyze a file or dataset I upload.']
+    ];
+    suggestions.forEach(([icon,title,desc])=>{const b=document.createElement('button');b.className='sambot-prompt-card';const strong=document.createElement('b');strong.textContent=icon+'  '+title;const span=document.createElement('span');span.textContent=desc;b.append(strong,span);b.onclick=()=>{const input=document.querySelector('#box');if(input){input.value=desc;input.focus();input.dispatchEvent(new Event('input',{bubbles:true}));}};cards.appendChild(b)});
+    greeting.appendChild(cards);
+  }
+  // Ctrl/Cmd+K command palette, with keyboard-accessible navigation.
+  const commandOverlay=document.createElement('div');commandOverlay.id='sambotCommandOverlay';
+  commandOverlay.innerHTML='<div id="sambotCommandBox" role="dialog" aria-modal="true" aria-label="Sambot command palette"><input id="sambotCommandInput" placeholder="Search actions… (try calculator, theme, export)" autocomplete="off"><div id="sambotCommandResults"></div><div id="sambotCommandHint">↑ ↓ to navigate · Enter to run · Esc to close</div></div>';
+  document.body.appendChild(commandOverlay);
+  const commandInput=commandOverlay.querySelector('#sambotCommandInput'),commandResults=commandOverlay.querySelector('#sambotCommandResults');
+  const commands=[
+    ['New chat','Start a fresh conversation','Ctrl+Shift+O',()=>document.querySelector('.new')?.click()],
+    ['Search chats','Find a conversation','',()=>{const s=document.querySelector('#search');s?.focus();}],
+    ['Calculator','Calculate a math expression','',()=>document.querySelector('button[onclick="openCalculator()"]')?.click()],
+    ['Capabilities','Show available Sambot features','',()=>document.querySelector('button[onclick="showCapabilities()"]')?.click()],
+    ['Library','Open saved items','',()=>document.querySelector('#sambotExtraNav [data-action="library"]')?.click()],
+    ['Scheduled reminders','Open browser reminders','',()=>document.querySelector('#sambotExtraNav [data-action="scheduled"]')?.click()],
+    ['Explore workflows','Browse quick actions','',()=>document.querySelector('#sambotExtraNav [data-action="explore"]')?.click()],
+    ['Coding workspace','Open coding shortcuts','',()=>document.querySelector('#sambotExtraNav [data-action="codex"]')?.click()],
+    ['Toggle appearance','Switch light/dark theme','',()=>document.querySelector('button[onclick="toggleTheme()"]')?.click()],
+    ['Export current chat as PDF','Print or save as PDF','',()=>window.print()],
+    ['Export all chats','Download chat history','',()=>document.querySelector('button[onclick="exportChats()"]')?.click()],
+    ['Voice mode','Start hands-free voice chat','',()=>document.querySelector('#voiceModeBtn')?.click()]
+  ];
+  let commandIndex=0,filteredCommands=commands;
+  function drawCommands(){
+    const q=commandInput.value.trim().toLowerCase();
+    filteredCommands=commands.filter(c=>(c[0]+' '+c[1]).toLowerCase().includes(q));commandResults.innerHTML='';commandIndex=Math.min(commandIndex,Math.max(0,filteredCommands.length-1));
+    filteredCommands.forEach((c,i)=>{const d=document.createElement('div');d.className='sambot-command-item'+(i===commandIndex?' active':'');const label=document.createElement('span');label.textContent=c[0]+' — '+c[1];const key=document.createElement('span');key.className='sambot-shortcut';key.textContent=c[2]||'↵';d.append(label,key);d.onclick=()=>runCommand(i);commandResults.appendChild(d)});
+    if(!filteredCommands.length)commandResults.innerHTML='<div class="sambot-command-item">No matching actions</div>';
+  }
+  function openCommands(){commandOverlay.classList.add('open');commandInput.value='';commandIndex=0;drawCommands();setTimeout(()=>commandInput.focus(),0)}
+  function closeCommands(){commandOverlay.classList.remove('open')}
+  function runCommand(i){const c=filteredCommands[i];if(!c)return;closeCommands();try{c[3]()}catch(e){console.error('Sambot command failed',e)}}
+  commandInput.addEventListener('input',()=>{commandIndex=0;drawCommands()});
+  commandInput.addEventListener('keydown',e=>{if(e.key==='ArrowDown'){e.preventDefault();commandIndex=(commandIndex+1)%Math.max(1,filteredCommands.length);drawCommands()}else if(e.key==='ArrowUp'){e.preventDefault();commandIndex=(commandIndex-1+filteredCommands.length)%Math.max(1,filteredCommands.length);drawCommands()}else if(e.key==='Enter'){e.preventDefault();runCommand(commandIndex)}else if(e.key==='Escape')closeCommands()});
+  commandOverlay.addEventListener('click',e=>{if(e.target===commandOverlay)closeCommands()});
+  document.addEventListener('keydown',e=>{
+    const mac=/Mac|iPhone|iPad/.test(navigator.platform),mod=mac?e.metaKey:e.ctrlKey;
+    if(mod&&e.key.toLowerCase()==='k'){e.preventDefault();openCommands()}
+    if(mod&&e.shiftKey&&e.key.toLowerCase()==='o'){e.preventDefault();document.querySelector('.new')?.click()}
+    if(e.key==='Escape'&&commandOverlay.classList.contains('open'))closeCommands();
+  });
+  const paletteHint=document.createElement('button');paletteHint.className='iconbtn';paletteHint.textContent='⌕ Actions';paletteHint.title='Command palette (Ctrl+K)';paletteHint.onclick=openCommands;
+  const topActionContainer=document.querySelector('.top-actions');if(topActionContainer)topActionContainer.prepend(paletteHint);
+
   const topbar = document.querySelector('.topbar > div:first-child');
   if (topbar) {
     const select = document.createElement('select');
