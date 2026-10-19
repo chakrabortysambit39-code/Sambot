@@ -20,11 +20,7 @@ services:
         sync: false
       - key: SUPABASE_PUBLISHABLE_KEY
         sync: false
-      - key: RAZORPAY_KEY_ID
-        sync: false
-      - key: RAZORPAY_KEY_SECRET
-        sync: false
-      - key: RAZORPAY_WEBHOOK_SECRET
+      - key: SAMBOT_OWNER_EMAIL
         sync: false
       - key: BILLING_SESSION_SECRET
         sync: false
