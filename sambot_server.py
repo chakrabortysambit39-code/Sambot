@@ -26,7 +26,7 @@ class ChatRequest(BaseModel):
     instructions: str | None = None
 
 @app.post("/api/chat/stream")
-def stream_chat(req: ChatRequest, authorization: str | None = Header(default=None), request: Request = None):
+def stream_chat(req: ChatRequest, request: Request, authorization: str | None = Header(default=None)):
     """Stream assistant text as Server-Sent Events for the browser chat UI."""
     import json
     record_usage(authorization, request.client.host if request and request.client else 'unknown')
