@@ -97,7 +97,7 @@ def billing_config():
 @router.post("/request-code")
 def request_code(body: OTPRequest, request: Request):
     email=str(body.email).lower().strip()
-    if not re.fullmatch(r"[^@\\s]+@[^@\\s]+\\.[^@\\s]+", email): raise HTTPException(400,"Enter a valid email address.")
+    if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email): raise HTTPException(400,"Enter a valid email address.")
     now=int(time.time())
     con=_db()
     try:
