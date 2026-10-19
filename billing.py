@@ -222,7 +222,7 @@ def cancel_subscription(authorization: str|None=Header(default=None)):
     finally: con.close()
 
 @router.post("/record-usage")
-def record_usage(authorization: str|None=Header(default=None)):
+def record_usage(authorization: str|None=Header(default=None), client_key: str = "anonymous"):
     email=_email_from_token(authorization) if authorization else None
     now=int(time.time());period=time.strftime("%Y-%m",time.gmtime())
     con=_db()
@@ -233,7 +233,7 @@ def record_usage(authorization: str|None=Header(default=None)):
             active=bool(sub and sub["status"]=="active" and (not sub["current_period_end"] or sub["current_period_end"]>now))
         limit=1000 if active else 30
         if email: who=email
-        else: who="anon:"+hashlib.sha256((os.getenv("BILLING_SESSION_SECRET","")+ (authorization or "anonymous")).encode()).hexdigest()[:32]
+        else: who="anon:"+hashlib.sha256((os.getenv("BILLING_SESSION_SECRET","")+ (client_key or "anonymous")).encode()).hexdigest()[:32]
         row=con.execute("SELECT count FROM usage WHERE email=? AND period=?",(who,period)).fetchone()
         count=row["count"] if row else 0
         if count>=limit: raise HTTPException(429,"Monthly chat limit reached. Sign in and upgrade to Premium for a higher limit.")
