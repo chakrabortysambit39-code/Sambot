@@ -1,6 +1,7 @@
 """Render entry point for Sambot X, including optional feature routes."""
 import os
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
+from fastapi import Header, Request
 from pydantic import BaseModel
 from groq import Groq
 import web_app
@@ -25,10 +26,10 @@ class ChatRequest(BaseModel):
     instructions: str | None = None
 
 @app.post("/api/chat/stream")
-def stream_chat(req: ChatRequest, authorization: str | None = None):
+def stream_chat(req: ChatRequest, authorization: str | None = Header(default=None), request: Request = None):
     """Stream assistant text as Server-Sent Events for the browser chat UI."""
     import json
-    record_usage(authorization)
+    record_usage(authorization, request.client.host if request and request.client else 'unknown')
     key = os.getenv("GROQ_API_KEY")
     if not key:
         return JSONResponse({"error": "GROQ_API_KEY is not configured in Render."}, status_code=503)
