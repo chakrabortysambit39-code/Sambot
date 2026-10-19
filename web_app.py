@@ -132,12 +132,57 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
 .composer{left:268px;padding:10px 16px 14px;background:linear-gradient(transparent,#08090c 30%)}
 .compose{border-radius:20px;width:min(850px,100%)}
 @media(max-width:760px){.sidebar{width:280px;min-width:280px;max-width:280px}.composer{left:0}.side-tools-list{max-height:30vh}}
+
+/* Premium workspace layer */
+:root{--premium-accent:#9ab8ff;--premium-border:#2b303b;--premium-surface:#15171d;--premium-muted:#a3a9b6}
+body{background:#0b0c0f}
+.sidebar{background:#101116;border-right:1px solid #252832}
+.brand{font-size:18px;letter-spacing:-.3px;padding:10px 8px 16px}
+.brand small{color:#8b91a0;opacity:1;font-weight:600;letter-spacing:.4px}
+.new{background:#1a1c23;border-color:#343844;border-radius:12px;padding:12px;font-size:13px}
+.new:hover{background:#242833;border-color:#4a5365}
+.search input{border-radius:11px;padding:11px 12px;background:#171920;border-color:#2a2e38}
+.history-title{letter-spacing:1.1px;font-weight:700;font-size:9px;color:#858b98;padding:13px 8px 7px}
+.chatitem{min-height:39px;padding:9px 9px;border:1px solid transparent;border-radius:10px}
+.chatitem.active{background:#242833;border-color:#303746;box-shadow:none}
+.chatname{font-size:12.5px}
+.side-tools summary{border:1px solid transparent;font-weight:600}
+.side-tools[open] summary{background:#191c23;border-color:#2c303a}
+.profile{font-size:12px}
+.avatar{background:linear-gradient(135deg,#8caeff,#536baf);color:#0c1020;font-weight:800}
+.topbar{height:60px;padding:0 22px;background:rgba(10,11,14,.92);border-bottom-color:#222630}
+.model{font-size:14px;letter-spacing:-.2px}
+.status{font-size:11px;color:#858d9b;opacity:1}
+.top-actions .iconbtn{border-radius:11px;padding:9px 12px;background:#191c23;border-color:#303541}
+.chat{padding:30px clamp(16px,4vw,46px) 190px;scrollbar-gutter:stable}
+.empty{max-width:720px;margin:clamp(80px,15vh,150px) auto 30px}
+.empty h1{font-size:clamp(30px,4vw,42px);letter-spacing:-1.2px;font-weight:650;background:linear-gradient(100deg,#f5f6fa,#b5c8f1);-webkit-background-clip:text;background-clip:text;color:transparent}
+.empty p{color:#9ca3b2;opacity:1;font-size:14px;line-height:1.7}
+.msg{font-size:14px;line-height:1.75;border-radius:18px;padding:16px 18px}
+.assistant .msg{background:transparent;border-color:transparent;box-shadow:none;padding-left:4px;padding-right:4px}
+.user .msg{background:#242833;border:1px solid #303541}
+.actions{padding-left:3px;opacity:.8}
+.mini{border-color:transparent;border-radius:8px}
+.mini:hover{background:#20242d;border-color:#353b48}
+.composer{padding:12px 18px max(16px,env(safe-area-inset-bottom));background:linear-gradient(transparent,rgba(9,10,13,.97) 24%)}
+.compose{background:#17191f;border:1px solid #343945;border-radius:23px;padding:12px 12px 9px;width:min(860px,100%);box-shadow:0 12px 45px #0005}
+.compose:focus-within{border-color:#555f73;box-shadow:0 12px 45px #0006,0 0 0 3px #8aaaff0d}
+.compose textarea{min-height:54px;padding:9px 10px;font-size:14px;line-height:1.6}
+.controls{align-items:center;gap:8px;padding:2px 1px}
+.tools{gap:6px;flex-wrap:wrap}
+.toolbtn,.iconbtn{font-size:11.5px;border-radius:10px;padding:8px 10px;background:#1b1e25;border-color:#303541;color:#d8dce5}
+.toolbtn:hover,.iconbtn:hover{background:#262b35;border-color:#4a5364}
+.send{background:#f2f3f6;color:#121318;border-color:#f2f3f6;font-weight:700}
+.send:hover{background:#dce4f6;color:#111}
+#attachments,#voiceStatus{color:#a8b0bf}
+@media(min-width:1100px){.wrap{max-width:min(790px,88%)}.row{margin:21px 0}}
+@media(max-width:760px){.topbar{padding:0 12px}.chat{padding:22px 12px 200px}.composer{padding:8px 10px 12px}.compose{border-radius:19px}.tools{gap:5px}.toolbtn{padding:7px 8px;font-size:11px}.status{display:none}.empty{margin:9vh auto 24px}.empty h1{font-size:30px}}
 </style>
 </head>
 <body>
 <div class="app">
 <aside class="sidebar" id="sidebar">
-<div class="brand">✨ SAMBOT X <small>AI ASSISTANT</small></div>
+<div class="brand">✦ SAMBOT X <small>PREMIUM AI</small></div>
 <button class="new" onclick="newChat()">＋ New chat</button>
 <div class="search"><input id="search" placeholder="🔎 Search chats..." oninput="renderHistory()"></div>
 <div class="history-title">CHAT HISTORY</div>
