@@ -253,7 +253,17 @@ def image(req: ImageRequest):
         if not r.ok:
             try: err=r.json()
             except Exception: err=r.text[:1000]
-            return {"error":f"Cloudflare returned HTTP {r.status_code}: {err}"}
+            # Translate provider safety-filter errors into a clear, actionable message.
+            err_text = str(err).lower()
+            if "nsfw" in err_text or '"code": 8007' in err_text or "'code': 8007" in err_text:
+                return JSONResponse({
+                    "error": "Cloudflare's image safety filter rejected this prompt. This can be a false positive. Try rephrasing it with neutral, specific visual details (subject, setting, style, lighting), and avoid ambiguous wording. Sambot cannot override the provider's safety filter.",
+                    "code": "IMAGE_PROMPT_FILTERED",
+                    "retryable": True
+                }, status_code=400)
+            if r.status_code == 429:
+                return JSONResponse({"error":"Cloudflare image generation is rate-limited right now. Wait a little and try again.","code":"IMAGE_RATE_LIMITED","retryable":True},status_code=429)
+            return JSONResponse({"error":f"Cloudflare image generation failed (HTTP {r.status_code}). Please try again later. Provider details: {str(err)[:400]}","code":"IMAGE_PROVIDER_ERROR","retryable":r.status_code >= 500},status_code=r.status_code)
         try: data=r.json()
         except Exception: return {"error":f"Cloudflare returned a non-JSON response (HTTP {r.status_code})."}
         image_b64=data.get("result",{}).get("image")
