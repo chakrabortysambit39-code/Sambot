@@ -64,6 +64,50 @@ button,input,textarea{font:inherit}.app{height:100vh;display:flex}.sidebar{width
  .wrap{max-width:96%}
  .controls{align-items:flex-start}
 }
+
+/* Butter-smooth motion and interaction polish */
+html{scroll-behavior:smooth}
+body,.sidebar,.main,.topbar,.compose,.msg,.chatitem,.sidebtn,.toolbtn,.iconbtn,.new,.mini,.send,.panel,.chat-action-panel{
+ transition:background-color .18s ease,border-color .18s ease,color .18s ease,box-shadow .2s ease,transform .18s cubic-bezier(.2,.75,.25,1),opacity .18s ease;
+}
+button{touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible{outline:2px solid #8aa9e8;outline-offset:2px}
+.chat{scrollbar-gutter:stable;scroll-padding-bottom:180px}
+.chat::-webkit-scrollbar,.history::-webkit-scrollbar,.sidebottom::-webkit-scrollbar{width:8px}
+.chat::-webkit-scrollbar-thumb,.history::-webkit-scrollbar-thumb,.sidebottom::-webkit-scrollbar-thumb{background:#343a46;border:2px solid transparent;background-clip:padding-box;border-radius:20px}
+.chat::-webkit-scrollbar-thumb:hover,.history::-webkit-scrollbar-thumb:hover,.sidebottom::-webkit-scrollbar-thumb:hover{background:#50596a;border:2px solid transparent;background-clip:padding-box}
+.chatitem{min-height:39px;position:relative}
+.chatitem:hover{transform:translateX(2px)}
+.chatitem.active{box-shadow:inset 2px 0 #8aa9e8}
+.chatname{min-width:0}
+.menu{flex:0 0 auto;opacity:.6}
+.chatitem:hover .menu,.chatitem.active .menu{opacity:1}
+.new:hover,.toolbtn:hover,.iconbtn:hover,.sidebtn:hover,.mini:hover{transform:translateY(-1px)}
+.new:active,.toolbtn:active,.iconbtn:active,.sidebtn:active,.mini:active,.send:active{transform:scale(.98)}
+.compose{transition:border-color .2s ease,box-shadow .22s ease,background-color .2s ease}
+.compose textarea{transition:height .12s ease}
+.row{animation:sambotRowIn .18s ease-out both}
+@keyframes sambotRowIn{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}
+.msg{contain:layout style;line-height:1.68}
+.msg pre{max-width:100%;overscroll-behavior-x:contain;scrollbar-width:thin}
+.msg img,.image-result{height:auto;max-height:70vh;object-fit:contain}
+.composer{padding-bottom:max(14px,env(safe-area-inset-bottom))}
+.compose{backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px)}
+.send{transition:transform .12s ease,opacity .12s ease,background-color .15s ease}
+.send:hover{box-shadow:0 3px 14px #0003}
+#sambotUiModal,#sambotCommandOverlay{backdrop-filter:blur(7px);-webkit-backdrop-filter:blur(7px)}
+.sambot-ui-card,#sambotCommandBox{animation:sambotModalIn .16s cubic-bezier(.2,.75,.25,1) both}
+@keyframes sambotModalIn{from{opacity:0;transform:translateY(7px) scale(.99)}to{opacity:1;transform:translateY(0) scale(1)}}
+@media(max-width:760px){
+ .sidebar{box-shadow:12px 0 40px #0005}
+ .sidebar.open{animation:sambotSidebarIn .18s ease-out}
+ @keyframes sambotSidebarIn{from{transform:translateX(-8px);opacity:.85}to{transform:translateX(0);opacity:1}}
+ .chatitem:hover{transform:none}
+}
+@media(prefers-reduced-motion:reduce){
+ html{scroll-behavior:auto}
+ *,*:before,*:after{animation-duration:.01ms!important;animation-iteration-count:1!important;scroll-behavior:auto!important;transition-duration:.01ms!important}
+}
 </style>
 </head>
 <body>
