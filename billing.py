@@ -78,7 +78,7 @@ def _razorpay():
 class OTPRequest(BaseModel):
     email: str
 class OTPVerify(BaseModel):
-    email: EmailStr
+    email: str
     code: str
 class OrderRequest(BaseModel):
     plan: str = PLAN_ID
