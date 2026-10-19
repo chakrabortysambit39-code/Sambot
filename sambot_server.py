@@ -133,6 +133,77 @@ if _original_home:
     } catch (_) {}
     return nativeFetch(input, init);
   };
+
+  // ChatGPT-style navigation and practical browser-side utilities.
+  const sidebar = document.querySelector('#sidebar');
+  const nav = document.createElement('div');
+  nav.id = 'sambotExtraNav';
+  nav.innerHTML = '<div class="history-title">WORKSPACE</div>'+
+    '<button class="sidebtn" data-action="scheduled">◷ Scheduled</button>'+
+    '<button class="sidebtn" data-action="library">▤ Library</button>'+
+    '<button class="sidebtn" data-action="explore">✧ Explore tools</button>'+
+    '<button class="sidebtn" data-action="plugins">◈ Plugins & tools</button>'+
+    '<button class="sidebtn" data-action="codex">⌘ Coding workspace</button>';
+  if(sidebar){const hist=sidebar.querySelector('.history-title');if(hist)hist.insertAdjacentElement('beforebegin',nav);else sidebar.prepend(nav);}
+  const style=document.createElement('style');
+  style.textContent=`
+    #sambotExtraNav{padding:5px 0 8px;border-bottom:1px solid #252831;margin-bottom:7px}
+    #sambotExtraNav .sidebtn{padding:8px;font-size:13px}
+    .sambot-ui-modal{position:fixed;inset:0;z-index:9999;background:#000a;display:none;align-items:center;justify-content:center;padding:18px}
+    .sambot-ui-modal.open{display:flex}
+    .sambot-ui-card{width:min(560px,100%);max-height:82vh;overflow:auto;background:#171a20;color:#f5f5f5;border:1px solid #343842;border-radius:16px;padding:20px}
+    .sambot-ui-card h2{margin:0 0 10px}.sambot-ui-card p{color:#aeb3bd;font-size:13px;line-height:1.5}
+    .sambot-ui-card button,.sambot-ui-card input,.sambot-ui-card textarea,.sambot-ui-card select{font:inherit}
+    .sambot-ui-card button{background:#252a33;color:inherit;border:1px solid #414754;border-radius:9px;padding:9px 11px;margin:4px;cursor:pointer}
+    .sambot-ui-card input,.sambot-ui-card textarea{display:block;width:100%;margin:8px 0;padding:10px;border-radius:8px;border:1px solid #414754;background:#0e1014;color:inherit}
+    .sambot-ui-item{padding:10px;border:1px solid #343842;border-radius:9px;margin:7px 0;overflow-wrap:anywhere}
+    @media print{body{height:auto;overflow:visible;background:white;color:black}.sidebar,.topbar,.composer,.actions,.sambot-ui-modal{display:none!important}.app,.main,.chat{height:auto;display:block;overflow:visible;background:white;color:black;padding:0}.msg,.user .msg{background:white!important;color:black!important;border:1px solid #ddd;break-inside:avoid}.row{break-inside:avoid}}
+    .light #sambotExtraNav{border-color:#ddd}.light .sambot-ui-card{background:white;color:#111}.light .sambot-ui-card input,.light .sambot-ui-card textarea{background:white;color:#111}
+  `;
+  document.head.appendChild(style);
+  const ui=document.createElement('div');ui.className='sambot-ui-modal';ui.id='sambotUiModal';
+  ui.innerHTML='<div class="sambot-ui-card"><div style="display:flex;justify-content:space-between;align-items:center;gap:10px"><h2 id="sambotUiTitle">Sambot</h2><button id="sambotUiClose">✕ Close</button></div><div id="sambotUiBody"></div></div>';
+  document.body.appendChild(ui);
+  const uiTitle=ui.querySelector('#sambotUiTitle'),uiBody=ui.querySelector('#sambotUiBody');
+  const closeUi=()=>ui.classList.remove('open');
+  ui.querySelector('#sambotUiClose').onclick=closeUi;ui.addEventListener('click',e=>{if(e.target===ui)closeUi()});
+  function showUi(title,html){uiTitle.textContent=title;uiBody.innerHTML=html;ui.classList.add('open')}
+  function addPrompt(text){const b=document.querySelector('#box');if(b){b.value=text;b.focus();closeUi();}}
+  function libraryView(){
+    const items=JSON.parse(localStorage.getItem('sambot_library')||'[]');
+    showUi('Library','<p>Save useful answers here on this device. Nothing is uploaded to an account.</p><button id="saveCurrent">＋ Save current conversation</button><div id="libraryItems"></div>');
+    uiBody.querySelector('#saveCurrent').onclick=()=>{
+      const sessions=JSON.parse(localStorage.getItem('sambot_sessions')||'[]'),id=localStorage.getItem('sambot_current');
+      const s=sessions.find(x=>String(x.id)===String(id));if(!s||!s.messages?.length){alert('Start a conversation first.');return;}
+      const lib=JSON.parse(localStorage.getItem('sambot_library')||'[]');lib.unshift({title:s.title||'Saved conversation',savedAt:new Date().toISOString(),messages:s.messages});localStorage.setItem('sambot_library',JSON.stringify(lib.slice(0,100)));libraryView();
+    };
+    const box=uiBody.querySelector('#libraryItems');
+    (items||[]).forEach((it,i)=>{const d=document.createElement('div');d.className='sambot-ui-item';const title=document.createElement('b');title.textContent=it.title||'Saved conversation';const open=document.createElement('button');open.textContent='Use as prompt';open.onclick=()=>addPrompt((it.messages||[]).map(m=>(m.role||'')+': '+(m.content||'')).join('\n\n'));const del=document.createElement('button');del.textContent='Delete';del.onclick=()=>{const a=JSON.parse(localStorage.getItem('sambot_library')||'[]');a.splice(i,1);localStorage.setItem('sambot_library',JSON.stringify(a));libraryView()};d.append(title,open,del);box.appendChild(d)});
+    if(!items.length)box.innerHTML='<p>Your saved items will appear here.</p>';
+  }
+  function scheduledView(){
+    const read=()=>JSON.parse(localStorage.getItem('sambot_reminders')||'[]');
+    showUi('Scheduled reminders','<p>Create a reminder stored in this browser. Keep Sambot open for on-time alerts; browser notifications may require permission.</p><input id="reminderText" placeholder="What should I remind you about?"><label>Date and time</label><input id="reminderTime" type="datetime-local"><button id="addReminder">＋ Schedule reminder</button><div id="reminderItems"></div>');
+    uiBody.querySelector('#addReminder').onclick=()=>{const text=uiBody.querySelector('#reminderText').value.trim(),when=new Date(uiBody.querySelector('#reminderTime').value).getTime();if(!text||!Number.isFinite(when)||when<=Date.now()){alert('Enter a reminder and a future date/time.');return;}const a=read();a.push({id:Date.now(),text,when,done:false});localStorage.setItem('sambot_reminders',JSON.stringify(a));scheduledView();};
+    const list=uiBody.querySelector('#reminderItems');read().forEach((r,i)=>{const d=document.createElement('div');d.className='sambot-ui-item';d.textContent=r.done?'✓ '+r.text:r.text+' — '+new Date(r.when).toLocaleString();if(!r.done){const del=document.createElement('button');del.textContent='Delete';del.onclick=()=>{const a=read();a.splice(i,1);localStorage.setItem('sambot_reminders',JSON.stringify(a));scheduledView()};d.appendChild(del)}list.appendChild(d)});
+  }
+  function checkReminders(){try{const a=JSON.parse(localStorage.getItem('sambot_reminders')||'[]');let changed=false;a.forEach(r=>{if(!r.done&&r.when<=Date.now()){alert('Sambot reminder: '+r.text);r.done=true;changed=true;}});if(changed)localStorage.setItem('sambot_reminders',JSON.stringify(a));}catch(_){}}
+  checkReminders();setInterval(checkReminders,30000);
+  const toolContent={
+    explore:[['Write','Help me write a clear, polished piece of writing.'],['Learn','Teach me this topic step by step with examples.'],['Plan','Create a practical plan with milestones and a checklist.'],['Brainstorm','Give me creative ideas, compare them, and recommend one.'],['Study quiz','Quiz me one question at a time and explain my mistakes.']],
+    plugins:[['Web research','Research this topic using current web information and cite useful sources.'],['Analyze data','Help me analyze the data I attach; explain the method and limitations.'],['Image prompt','Help me create a detailed image-generation prompt.'],['Calculator','Open the calculator from the Sambot sidebar.']],
+    codex:[['Explain code','Explain the code I paste, line by line, with examples.'],['Debug code','Debug this code. Identify the root cause, then provide a corrected version and tests.'],['Build a project','Help me build a complete project with a file tree, code, setup instructions, and tests.'],['Review code','Review this code for bugs, security issues, and performance problems.']]
+  };
+  function toolView(kind){
+    const names={explore:'Explore',plugins:'Plugins & tools',codex:'Coding workspace'};
+    showUi(names[kind],'<p>Choose a workflow to start it in the chat. These are built-in prompt shortcuts, not external plugins.</p><div id="sambotWorkflowList"></div>');
+    const list=uiBody.querySelector('#sambotWorkflowList');
+    toolContent[kind].forEach(([label,prompt])=>{const d=document.createElement('div');d.className='sambot-ui-item';const b=document.createElement('button');b.textContent=label;b.onclick=()=>{if(label==='Calculator'){closeUi();const c=document.querySelector('.sidebtn[onclick="openCalculator()"]');if(c)c.click();else alert('Use the Calculator button in the sidebar.');return;}addPrompt(prompt)};d.appendChild(b);list.appendChild(d)});
+  }
+  nav.addEventListener('click',e=>{const b=e.target.closest('button[data-action]');if(!b)return;const a=b.dataset.action;if(a==='scheduled')scheduledView();else if(a==='library')libraryView();else toolView(a)});
+  const topActions=document.querySelector('.top-actions');
+  if(topActions){const pdf=document.createElement('button');pdf.className='iconbtn';pdf.textContent='⤓ Export PDF';pdf.title='Print or save the current chat as PDF';pdf.onclick=()=>window.print();topActions.appendChild(pdf);}
+
   const topbar = document.querySelector('.topbar > div:first-child');
   if (topbar) {
     const select = document.createElement('select');
