@@ -275,6 +275,81 @@ def image(req: ImageRequest):
     except Exception as e:
         return {"error":f"Cloudflare image generation failed: {type(e).__name__}: {e}"}
 
+class ToolRequest(BaseModel):
+    text: str
+    kind: str = "calculate"
+
+@app.post("/api/tools/calculate")
+def calculate_tool(req: ToolRequest):
+    """Evaluate basic arithmetic safely without eval/exec."""
+    import ast, operator, math
+    ops = {ast.Add: operator.add, ast.Sub: operator.sub, ast.Mult: operator.mul,
+           ast.Div: operator.truediv, ast.FloorDiv: operator.floordiv, ast.Mod: operator.mod,
+           ast.Pow: operator.pow, ast.USub: operator.neg, ast.UAdd: operator.pos}
+    try:
+        tree = ast.parse(req.text, mode="eval")
+        def calc(node):
+            if isinstance(node, ast.Expression): return calc(node.body)
+            if isinstance(node, ast.Constant) and isinstance(node.value, (int, float)) and not isinstance(node.value, bool): return node.value
+            if isinstance(node, ast.UnaryOp) and type(node.op) in ops: return ops[type(node.op)](calc(node.operand))
+            if isinstance(node, ast.BinOp) and type(node.op) in ops:
+                left, right = calc(node.left), calc(node.right)
+                if isinstance(node.op, ast.Pow) and abs(right) > 1000: raise ValueError("Exponent too large.")
+                value = ops[type(node.op)](left, right)
+                if not math.isfinite(float(value)) or abs(value) > 1e100: raise ValueError("Result is too large.")
+                return value
+            raise ValueError("Only basic arithmetic is supported: +, -, *, /, //, %, and powers.")
+        value = calc(tree)
+        return {"ok": True, "expression": req.text, "result": value}
+    except Exception as exc:
+        return JSONResponse({"ok":False,"error":str(exc)},status_code=400)
+
+@app.post("/api/tools/analyze-csv")
+async def analyze_csv(file: UploadFile = File(...)):
+    """Analyze CSV values with Python's standard library; no code execution."""
+    import csv, io, statistics, collections
+    if not (file.filename or "").lower().endswith(".csv"):
+        return JSONResponse({"error":"Please upload a .csv file."},status_code=400)
+    raw=await file.read()
+    if len(raw)>8*1024*1024:
+        return JSONResponse({"error":"CSV is larger than 8 MB."},status_code=413)
+    try:
+        text=raw.decode("utf-8-sig")
+        reader=csv.DictReader(io.StringIO(text))
+        rows=list(reader)
+        if not reader.fieldnames or not rows:
+            return JSONResponse({"error":"CSV must contain a header row and at least one data row."},status_code=400)
+        report={"filename":file.filename,"rows":len(rows),"columns":[]}
+        for name in reader.fieldnames[:50]:
+            vals=[(r.get(name) or "").strip() for r in rows]
+            present=[v for v in vals if v]
+            missing=len(vals)-len(present)
+            numeric=[]
+            for v in present:
+                try: numeric.append(float(v.replace(",","")))
+                except ValueError: pass
+            col={"name":name,"missing":missing,"unique":len(set(present))}
+            if present and len(numeric)==len(present):
+                col.update({"type":"numeric","min":min(numeric),"max":max(numeric),"mean":statistics.fmean(numeric),"median":statistics.median(numeric)})
+            else:
+                col["type"]="categorical/text"
+                col["top_values"]=[{"value":v,"count":n} for v,n in collections.Counter(present).most_common(5)]
+            report["columns"].append(col)
+        return {"ok":True,"report":report}
+    except Exception as exc:
+        return JSONResponse({"error":"Could not analyze CSV: "+str(exc)},status_code=400)
+
+@app.get("/api/capabilities")
+def capabilities():
+    return {"app":"Sambot X","login_required":False,"capabilities":{
+      "chat":["streaming","model_selection","custom_instructions","local_memory","regenerate","edit_messages"],
+      "voice":["browser_speech_input","read_aloud","hands_free_voice_mode","language_and_speed_settings"],
+      "media":["cloudflare_image_generation","vision_endpoint","file_uploads"],
+      "tools":["web_search","safe_calculator","csv_statistics","markdown_export","json_import_export"],
+      "storage":["browser_local_history","local_preferences"],
+      "limitations":["no OpenAI private model access","no full Python execution sandbox","no cross-device sync without a server-side identity or shared profile","browser speech support varies"]
+    }}
+
 @app.post("/api/chat/stream")
 def stream_chat(req: ChatRequest):
     import json
