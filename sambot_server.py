@@ -6,6 +6,7 @@ from groq import Groq
 import web_app
 from web_app import app
 from sambot_features import router as features_router, CHAT_MODELS
+from billing import router as billing_router, record_usage
 
 app.router.routes[:] = [
     route for route in app.router.routes
@@ -24,9 +25,10 @@ class ChatRequest(BaseModel):
     instructions: str | None = None
 
 @app.post("/api/chat/stream")
-def stream_chat(req: ChatRequest):
+def stream_chat(req: ChatRequest, authorization: str | None = None):
     """Stream assistant text as Server-Sent Events for the browser chat UI."""
     import json
+    record_usage(authorization)
     key = os.getenv("GROQ_API_KEY")
     if not key:
         return JSONResponse({"error": "GROQ_API_KEY is not configured in Render."}, status_code=503)
@@ -76,7 +78,8 @@ def stream_chat(req: ChatRequest):
     })
 
 @app.post("/api/chat")
-def selected_model_chat(req: ChatRequest):
+def selected_model_chat(req: ChatRequest, authorization: str | None = None):
+    record_usage(authorization)
     key = os.getenv("GROQ_API_KEY")
     if not key:
         return JSONResponse({"error": "GROQ_API_KEY is not configured in Render."}, status_code=503)
@@ -110,6 +113,7 @@ def selected_model_chat(req: ChatRequest):
         return JSONResponse({"error": f"AI request failed ({type(exc).__name__}): {exc}"}, status_code=502)
 
 app.include_router(features_router)
+app.include_router(billing_router)
 
 _original_home = next((r.endpoint for r in app.router.routes if getattr(r, "path", None) == "/" and "GET" in getattr(r, "methods", set())), None)
 if _original_home:
