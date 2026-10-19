@@ -8,7 +8,7 @@ from email.message import EmailMessage
 from urllib.parse import quote
 from fastapi import APIRouter, Request, Header, HTTPException
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel
 
 router = APIRouter(prefix="/api/billing", tags=["billing"])
 PRICE_PAISE = 29900
@@ -76,7 +76,7 @@ def _razorpay():
     return key,secret
 
 class OTPRequest(BaseModel):
-    email: EmailStr
+    email: str
 class OTPVerify(BaseModel):
     email: EmailStr
     code: str
@@ -97,6 +97,7 @@ def billing_config():
 @router.post("/request-code")
 def request_code(body: OTPRequest, request: Request):
     email=str(body.email).lower().strip()
+    if not re.fullmatch(r"[^@\\s]+@[^@\\s]+\\.[^@\\s]+", email): raise HTTPException(400,"Enter a valid email address.")
     now=int(time.time())
     con=_db()
     try:
