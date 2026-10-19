@@ -215,10 +215,9 @@ async def razorpay_webhook(request: Request):
 def cancel_subscription(authorization: str|None=Header(default=None)):
     email=_email_from_token(authorization);con=_db()
     try:
-        row=con.execute("SELECT * FROM subscriptions WHERE email=?",(email,)).fetchone()
-        if not row or row["status"]!="active": raise HTTPException(400,"No active subscription to cancel.")
-        con.execute("UPDATE subscriptions SET status='cancelled',updated_at=? WHERE email=?",(int(time.time()),email));con.commit()
-        return {"ok":True,"message":"Auto-renewal cancellation is not available for one-time UPI checkout; access remains until the period ends."}
+        row=con.execute("SELECT status,current_period_end FROM subscriptions WHERE email=?",(email,)).fetchone()
+        if not row or row["status"]!="active": raise HTTPException(400,"No active Premium access.")
+        return {"ok":True,"message":"This is a one-time 30-day purchase with no auto-renewal, so there is no recurring payment to cancel. Premium remains active until the displayed expiry date."}
     finally: con.close()
 
 @router.post("/record-usage")
