@@ -420,9 +420,10 @@ def image(req: ImageRequest):
             return JSONResponse({"error":"The image provider returned an unexpected response. Please try again."}, status_code=502)
         return {"image":f"data:image/jpeg;base64,{image_b64}"}
     except requests.Timeout:
-        return {"error":"Cloudflare image generation timed out. Please try again."}
+        return JSONResponse({"error":"Image generation timed out. Please try again."}, status_code=504)
     except Exception as e:
-        return {"error":f"Cloudflare image generation failed: {type(e).__name__}: {e}"}
+        print(f"SAMBOT_IMAGE_ERROR: {type(e).__name__}: {e}")
+        return JSONResponse({"error":"Image generation failed unexpectedly. Please try again later."}, status_code=502)
 
 class ToolRequest(BaseModel):
     text: str
