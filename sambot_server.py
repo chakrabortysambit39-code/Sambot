@@ -9,9 +9,15 @@ from web_app import app
 from sambot_features import router as features_router, CHAT_MODELS
 from billing import router as billing_router, record_usage
 
+# Remove the original chat handlers before registering the enhanced Render handlers.
+# FastAPI matches routes in registration order; leaving the old /api/chat/stream
+# endpoint in place would shadow the selected-model streaming endpoint below.
 app.router.routes[:] = [
     route for route in app.router.routes
-    if not (getattr(route, "path", None) == "/api/chat" and "POST" in getattr(route, "methods", set()))
+    if not (
+        getattr(route, "path", None) in {"/api/chat", "/api/chat/stream"}
+        and "POST" in getattr(route, "methods", set())
+    )
 ]
 
 class ChatMessage(BaseModel):
