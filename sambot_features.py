@@ -3,7 +3,7 @@ import base64
 import os
 from fastapi import APIRouter, File, UploadFile
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from groq import Groq
 
 router = APIRouter()
@@ -20,8 +20,8 @@ def models():
     return {"models": CHAT_MODELS, "default": os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")}
 
 class VisionRequest(BaseModel):
-    prompt: str = "Describe this image clearly and accurately."
-    image_data_url: str
+    prompt: str = Field(default="Describe this image clearly and accurately.", max_length=4000)
+    image_data_url: str = Field(max_length=12_000_000)
 
 @router.post("/api/vision")
 def vision(req: VisionRequest):
@@ -35,8 +35,13 @@ def vision(req: VisionRequest):
         mime = req.image_data_url[5:].split(";", 1)[0]
         if mime not in {"image/jpeg", "image/png", "image/webp", "image/gif"}:
             return JSONResponse({"error": "Use a JPG, PNG, WEBP, or GIF image."}, status_code=415)
-        if len(req.image_data_url) > 12_000_000:
-            return JSONResponse({"error": "Image is too large. Please choose an image under about 8 MB."}, status_code=413)
+        encoded = req.image_data_url.split(",", 1)[1]
+        try:
+            raw_image = base64.b64decode(encoded, validate=True)
+        except Exception:
+            return JSONResponse({"error": "The uploaded image data is invalid."}, status_code=400)
+        if len(raw_image) > 8 * 1024 * 1024:
+            return JSONResponse({"error": "Image is too large. Please choose an image under 8 MB."}, status_code=413)
         client = Groq(api_key=key, timeout=60.0, max_retries=1)
         result = client.chat.completions.create(
             model=os.getenv("GROQ_VISION_MODEL", "meta-llama/llama-4-scout-17b-16e-instruct"),
@@ -51,4 +56,5 @@ def vision(req: VisionRequest):
         )
         return {"reply": result.choices[0].message.content or "I couldn't produce an image description."}
     except Exception as exc:
-        return JSONResponse({"error": f"Image analysis failed ({type(exc).__name__}): {exc}"}, status_code=502)
+        print(f"SAMBOT_VISION_ERROR: {type(exc).__name__}: {exc}")
+        return JSONResponse({"error": "Image analysis failed. Please try a smaller supported image or try again later."}, status_code=502)
