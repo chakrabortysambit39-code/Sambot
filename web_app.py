@@ -498,12 +498,12 @@ async def analyze_csv(file: UploadFile = File(...)):
 @app.get("/api/capabilities")
 def capabilities():
     return {"app":"Sambot X","login_required":False,"capabilities":{
-      "chat":["streaming","model_selection","custom_instructions","local_memory","regenerate","edit_messages"],
+      "chat":["streaming","model_selection","custom_instructions","agent_tool_use","regenerate","edit_messages"],
       "voice":["browser_speech_input","read_aloud","hands_free_voice_mode","language_and_speed_settings"],
-      "media":["cloudflare_image_generation","vision_endpoint","file_uploads"],
-      "tools":["web_search","safe_calculator","csv_statistics","markdown_export","json_import_export"],
-      "storage":["browser_local_history","local_preferences"],
-      "limitations":["no OpenAI private model access","no full Python execution sandbox","no cross-device sync without a server-side identity or shared profile","browser speech support varies"]
+      "media":["cloudflare_image_generation","groq_vision_image_uploads","file_uploads"],
+      "tools":["agent_web_search","agent_safe_calculator","csv_statistics","markdown_export","json_import_export"],
+      "storage":["browser_local_history","local_preferences","account_scoped_private_memory"],
+      "limitations":["no OpenAI private model access","no full Python execution sandbox","chat transcripts remain browser-local; explicitly saved private memories sync by signed-in account","browser speech support varies"]
     }}
 
 @app.post("/api/chat/stream")
