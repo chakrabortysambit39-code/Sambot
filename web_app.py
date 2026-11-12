@@ -312,7 +312,8 @@ box.addEventListener("paste",e=>{
     document.getElementById("attachments").textContent="📎 "+attachedFiles.map(f=>f.name).join(", ");
   }
 });
-function sambotAuthHeaders(){const token=localStorage.getItem("sambot_billing_token")||"";return {"Content-Type":"application/json",...(token?{Authorization:"Bearer "+token}:{})}}\nfunction toggleWeb(){webEnabled=!webEnabled;document.getElementById("webBtn").style.background=webEnabled?"#2c3039":""}
+function sambotAuthHeaders(){const token=localStorage.getItem("sambot_billing_token")||"";return {"Content-Type":"application/json",...(token?{Authorization:"Bearer "+token}:{})}}
+function toggleWeb(){webEnabled=!webEnabled;document.getElementById("webBtn").style.background=webEnabled?"#2c3039":""}
 function toggleAgent(){agentEnabled=!agentEnabled;const b=document.getElementById("agentBtn");b.style.background=agentEnabled?"#334155":"";b.setAttribute("aria-pressed",String(agentEnabled));showChatNotice(agentEnabled?"Agent mode on: Sambot can use web search and a safe calculator, then explain its result.":"Agent mode off.");}
 function toggleDataAnalysis(){dataAnalysisEnabled=!dataAnalysisEnabled;const b=document.getElementById('dataAnalysisBtn');b.style.background=dataAnalysisEnabled?'#155e75':'';b.setAttribute('aria-pressed',String(dataAnalysisEnabled));showChatNotice(dataAnalysisEnabled?'Data analysis mode on: attach a CSV or spreadsheet and ask a question.':'Data analysis mode off.')}
 async function openCalculator(){const expression=prompt('Basic calculator: enter an expression (example: (125*8)/5)');if(!expression)return;try{const r=await fetch('/api/tools/calculate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:expression})});const j=await r.json();if(!r.ok)throw new Error(j.error||'Calculation failed');showChatNotice(expression+' = '+j.result)}catch(e){showChatNotice('Calculator: '+e.message)}}
