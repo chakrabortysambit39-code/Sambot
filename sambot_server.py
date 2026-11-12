@@ -9,6 +9,7 @@ from web_app import app
 from sambot_features import router as features_router, CHAT_MODELS
 from billing import router as billing_router, record_usage
 from user_memory import router as memory_router, get_memory_context
+from agent import router as agent_router
 
 # Remove the original chat handlers before registering the enhanced Render handlers.
 # FastAPI matches routes in registration order; leaving the old /api/chat/stream
@@ -128,6 +129,7 @@ def selected_model_chat(req: ChatRequest, request: Request, authorization: str |
 app.include_router(features_router)
 app.include_router(billing_router)
 app.include_router(memory_router)
+app.include_router(agent_router)
 
 _original_home = next((r.endpoint for r in app.router.routes if getattr(r, "path", None) == "/" and "GET" in getattr(r, "methods", set())), None)
 if _original_home:
