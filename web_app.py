@@ -1,9 +1,9 @@
 import os
 import requests
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi import UploadFile, File
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from groq import Groq
 
 app = FastAPI(title="SAMBOT X")
@@ -20,7 +20,7 @@ class ChatRequest(BaseModel):
     instructions: str | None = None
 
 class ImageRequest(BaseModel):
-    prompt: str
+    prompt: str = Field(min_length=1, max_length=2000)
 
 HTML = r"""<!doctype html>
 <html>
@@ -383,17 +383,20 @@ def web_search(query):
         return [{"title":"Web search unavailable","url":"","snippet":str(e)}]
 
 @app.post("/api/image")
-def image(req: ImageRequest):
+def image(req: ImageRequest, request: Request):
+    prompt = req.prompt.strip()
+    if not prompt:
+        return JSONResponse({"error":"Describe the image you want Sambot to create."}, status_code=400)
     account=os.getenv("CLOUDFLARE_ACCOUNT_ID")
     token=os.getenv("CLOUDFLARE_API_TOKEN")
     if not account or not token:
-        return {"error":"Cloudflare image generation is not configured in Render."}
+        return JSONResponse({"error":"Image generation is not configured. Add CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN to the server environment."}, status_code=503)
     url=f"https://api.cloudflare.com/client/v4/accounts/{account}/ai/run/@cf/black-forest-labs/flux-1-schnell"
     try:
         r=requests.post(
             url,
             headers={"Authorization":f"Bearer {token}","Content-Type":"application/json","Accept":"application/json"},
-            json={"prompt":req.prompt,"steps":4},
+            json={"prompt":prompt,"steps":4},
             timeout=120,
         )
         if not r.ok:
@@ -414,7 +417,7 @@ def image(req: ImageRequest):
         except Exception: return {"error":f"Cloudflare returned a non-JSON response (HTTP {r.status_code})."}
         image_b64=data.get("result",{}).get("image")
         if not image_b64:
-            return {"error":f"Cloudflare response did not contain an image: {data}"}
+            return JSONResponse({"error":"The image provider returned an unexpected response. Please try again."}, status_code=502)
         return {"image":f"data:image/jpeg;base64,{image_b64}"}
     except requests.Timeout:
         return {"error":"Cloudflare image generation timed out. Please try again."}
