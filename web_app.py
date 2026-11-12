@@ -3,7 +3,7 @@ import requests
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi import UploadFile, File
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from groq import Groq
 
 app = FastAPI(title="SAMBOT X")
@@ -20,7 +20,7 @@ class ChatRequest(BaseModel):
     instructions: str | None = None
 
 class ImageRequest(BaseModel):
-    prompt: str
+    prompt: str = Field(min_length=1, max_length=2000)
 
 HTML = r"""<!doctype html>
 <html>
@@ -200,7 +200,7 @@ body{background:#0b0c0f}
 <section class="chat" id="chat"></section>
 <div class="composer"><div class="compose">
 <textarea id="box" rows="2" placeholder="Message Sambot X..."></textarea>
-<div class="controls"><div class="tools"><input id="fileInput" type="file" hidden multiple accept=".txt,.md,.csv,.json,.pdf,.docx,.xlsx,.py,.js,.html,.css"><button class="toolbtn" onclick="document.getElementById('fileInput').click()">📎 Files</button><button class="toolbtn" id="webBtn" onclick="toggleWeb()">🌐 Web</button><button class="toolbtn" id="dataAnalysisBtn" onclick="toggleDataAnalysis()" title="Analyze attached CSV, spreadsheet, or table">📊 Analyze data</button><button class="toolbtn" id="mic" onclick="voice()">🎙 Voice input</button><button class="toolbtn" id="voiceModeBtn" onclick="startVoiceMode()">🎧 Voice mode</button></div><div class="tools"><button class="toolbtn" id="stopBtn" onclick="stopGeneration()" style="display:none">■ Stop</button><button class="toolbtn send" id="sendBtn" onclick="send()">Send ➤</button></div></div>
+<div class="controls"><div class="tools"><input id="fileInput" type="file" hidden multiple accept=".txt,.md,.csv,.json,.pdf,.docx,.xlsx,.py,.js,.html,.css,image/jpeg,image/png,image/webp,image/gif"><button class="toolbtn" onclick="document.getElementById('fileInput').click()">📎 Files</button><button class="toolbtn" id="webBtn" onclick="toggleWeb()">🌐 Web</button><button class="toolbtn" id="agentBtn" onclick="toggleAgent()" aria-pressed="false">⚡ Agent</button><button class="toolbtn" id="dataAnalysisBtn" onclick="toggleDataAnalysis()" title="Analyze attached CSV, spreadsheet, or table">📊 Analyze data</button><button class="toolbtn" id="mic" onclick="voice()">🎙 Voice input</button><button class="toolbtn" id="voiceModeBtn" onclick="startVoiceMode()">🎧 Voice mode</button></div><div class="tools"><button class="toolbtn" id="stopBtn" onclick="stopGeneration()" style="display:none">■ Stop</button><button class="toolbtn send" id="sendBtn" onclick="send()">Send ➤</button></div></div>
 <div id="attachments" style="font-size:11px;opacity:.6;padding:4px"></div><div id="voiceStatus" aria-live="polite" style="font-size:11px;opacity:.65;padding:2px 4px"></div><div style="text-align:center;font-size:10px;opacity:.35;padding:5px">Enter to send • Shift+Enter for new line • Type “create image …” for images • Web searches current information</div>
 </div></div>
 </section>
@@ -215,7 +215,7 @@ body{background:#0b0c0f}
 <button class="toolbtn" onclick="closeSettings()">Close</button>
 </div></div>
 
-<script>let webEnabled=false,dataAnalysisEnabled=false,attachedFiles=[];
+<script>let webEnabled=false,agentEnabled=false,dataAnalysisEnabled=false,attachedFiles=[];
 const box=document.getElementById('box'),chat=document.getElementById('chat'),historyEl=document.getElementById('history'),sidebar=document.getElementById('sidebar');
 let sessions=[];try{const stored=JSON.parse(localStorage.getItem('sambot_sessions')||'[]');sessions=Array.isArray(stored)?stored.filter(s=>s&&typeof s==='object'&&Array.isArray(s.messages)).map(s=>({id:String(s.id||('chat-'+Date.now()+'-'+Math.random())),title:typeof s.title==='string'?s.title:'New chat',messages:s.messages.filter(m=>m&&typeof m==='object'&&['user','assistant'].includes(m.role)).map(m=>({role:m.role,content:typeof m.content==='string'?m.content:'',...(typeof m.image==='string'?{image:m.image}:{})}))})):[]}catch(e){console.warn('SAMBOT_HISTORY_RECOVERY',e);sessions=[];try{localStorage.removeItem('sambot_sessions')}catch(_){}}let currentId=localStorage.getItem('sambot_current')||'';
 let theme=localStorage.getItem('sambot_theme')||'dark';
@@ -231,7 +231,7 @@ function inlineMarkdown(s){let x=escapeHTML(s);x=x.replace(/\x60([^\x60]+)\x60/g
 function renderMarkdown(source){const lines=String(source||'').replace(/<br\s*\/?\s*>/gi,'\n').replace(/\r/g,'').split('\n');let out='',paragraph=[],list='',code=false,codeLang='',codeLines=[];const flushP=()=>{if(paragraph.length){out+='<p>'+paragraph.map(inlineMarkdown).join('<br>')+'</p>';paragraph=[]}};const flushList=()=>{if(list){out+='</'+list+'>';list=''}};for(const line of lines){const fence=line.match(/^\s*```\s*([\w+-]*)/);if(fence){flushP();flushList();if(!code){code=true;codeLang=fence[1]||'';codeLines=[]}else{const raw=escapeHTML(codeLines.join('\n'));out+='<pre><button class="code-copy" type="button" onclick="copyCode(this)">Copy code</button><code'+(codeLang?' class="language-'+escapeHTML(codeLang)+'"':'')+'>'+raw+'</code></pre>';code=false;codeLang='';codeLines=[]}continue}if(code){codeLines.push(line);continue}if(!line.trim()){flushP();flushList();continue}if(/^\s*([-*_])\1\1+\s*$/.test(line)){flushP();flushList();out+='<hr>';continue}const h=line.match(/^\s{0,3}(#{1,6})\s+(.+)$/);if(h){flushP();flushList();const n=h[1].length;out+='<h'+n+'>'+inlineMarkdown(h[2])+'</h'+n+'>';continue}const q=line.match(/^\s*>\s?(.*)$/);if(q){flushP();flushList();out+='<blockquote>'+inlineMarkdown(q[1])+'</blockquote>';continue}const ul=line.match(/^\s*[-*+]\s+(.+)$/),ol=line.match(/^\s*\d+[.)]\s+(.+)$/);if(ul||ol){flushP();const type=ul?'ul':'ol';if(list!==type){flushList();list=type;out+='<'+type+'>'}out+='<li>'+inlineMarkdown((ul||ol)[1])+'</li>';continue}flushList();paragraph.push(line)}if(code){out+='<pre><code>'+escapeHTML(codeLines.join('\n'))+'</code></pre>'}flushP();flushList();return out}
 function copyCode(btn){const code=btn.parentElement.querySelector('code');navigator.clipboard?.writeText(code?.textContent||'').then(()=>{btn.textContent='Copied!';setTimeout(()=>btn.textContent='Copy code',1200)}).catch(()=>{})}
 function editUserMessage(index){const s=current();if(!s||!s.messages[index]||s.messages[index].role!=='user')return;box.value=s.messages[index].content||'';s.messages=s.messages.slice(0,index);save();renderChat();box.focus();box.setSelectionRange(box.value.length,box.value.length)}
-function drawMessage(m){const row=document.createElement('div');row.className='row '+m.role;const wrap=document.createElement('div');wrap.className='wrap';const msg=document.createElement('div');msg.className='msg';if(m.image){const img=document.createElement('img');img.className='image-result';img.src=m.image;msg.appendChild(img)}else msg.innerHTML=renderMarkdown(m.content||'');wrap.appendChild(msg);if((m.role==='assistant'||m.role==='user')&&!m.image){const acts=document.createElement('div');acts.className='actions';if(m.role==='assistant'){const cp=document.createElement('button');cp.className='mini';cp.textContent='Copy';cp.onclick=()=>navigator.clipboard?.writeText(m.content||'');acts.appendChild(cp);const sp=document.createElement('button');sp.className='mini';sp.textContent='🔊';sp.onclick=()=>speakText(m.content||'');acts.appendChild(sp);const rg=document.createElement('button');rg.className='mini';rg.textContent='↻ Regenerate';rg.onclick=()=>regenerate();acts.appendChild(rg)}else{const edit=document.createElement('button');edit.className='mini message-edit';edit.textContent='✎ Edit';const s=current();const index=s?s.messages.indexOf(m):-1;edit.onclick=()=>editUserMessage(index);acts.appendChild(edit)}wrap.appendChild(acts)}row.appendChild(wrap);chat.appendChild(row)}
+function drawMessage(m){const row=document.createElement('div');row.className='row '+m.role;const wrap=document.createElement('div');wrap.className='wrap';const msg=document.createElement('div');msg.className='msg';if(m.image){const img=document.createElement('img');img.className='image-result';img.src=m.image;msg.appendChild(img)}else msg.innerHTML=renderMarkdown(m.content||'');wrap.appendChild(msg);if(m.image&&m.role==='assistant'){const imageActions=document.createElement('div');imageActions.className='actions';const download=document.createElement('a');download.className='mini';download.textContent='⬇ Download image';download.href=m.image;download.download='sambot-image.jpg';imageActions.appendChild(download);wrap.appendChild(imageActions)}if((m.role==='assistant'||m.role==='user')&&!m.image){const acts=document.createElement('div');acts.className='actions';if(m.role==='assistant'){const cp=document.createElement('button');cp.className='mini';cp.textContent='Copy';cp.onclick=()=>navigator.clipboard?.writeText(m.content||'');acts.appendChild(cp);const sp=document.createElement('button');sp.className='mini';sp.textContent='🔊';sp.onclick=()=>speakText(m.content||'');acts.appendChild(sp);const rg=document.createElement('button');rg.className='mini';rg.textContent='↻ Regenerate';rg.onclick=()=>regenerate();acts.appendChild(rg)}else{const edit=document.createElement('button');edit.className='mini message-edit';edit.textContent='✎ Edit';const s=current();const index=s?s.messages.indexOf(m):-1;edit.onclick=()=>editUserMessage(index);acts.appendChild(edit)}wrap.appendChild(acts)}row.appendChild(wrap);chat.appendChild(row)}
 function loadChat(id){currentId=id;save();renderHistory();renderChat();sidebar.classList.remove('open')}
 function newChat(){currentId=Date.now().toString();sessions.unshift({id:currentId,title:'New chat',messages:[]});save();renderHistory();renderChat();box.focus()}
 let activeChatActionId=null;
@@ -253,10 +253,15 @@ async function send(){
  const controller=new AbortController();activeController=controller;setGenerating(true);let assistantMessage=null;
  try{
   session.messages.push({role:"user",content:text||"📎 Attached file(s)"});if(session.title==="New chat"&&text)session.title=text.slice(0,36);save();renderHistory();renderChat();chat.scrollTop=chat.scrollHeight;
-  const fileText=await uploadFiles();let finalText=fileText?(text||"Please analyze the attached file(s).")+"\n\n[Attached file contents]\n"+fileText:text;
+  const fileText=await uploadFiles(text);let finalText=fileText?(text||"Please analyze the attached file(s).")+"\n\n[Attached file contents]\n"+fileText:text;
   if(dataAnalysisEnabled){if(!fileText)throw new Error("Attach a CSV, spreadsheet, or text file first, then enable Analyze data.");finalText="DATA ANALYSIS REQUEST: Analyze the supplied dataset carefully. Identify columns and data types, row count, missing values, useful descriptive statistics for numeric columns, category counts for categorical columns, notable trends/outliers, and answer the user's specific question. Show calculations where possible, clearly state assumptions, and do not invent values. Use Markdown tables.\n\nUSER QUESTION: "+(text||"Summarize and analyze this dataset.")+"\n\nDATA:\n"+fileText}
   const msgs=current().messages.filter(m=>!m.image&&m.content!=="Thinking…").slice(-20).map(m=>({role:m.role,content:m.content}));if(fileText)msgs[msgs.length-1]={role:"user",content:finalText};
-  const response=await fetch("/api/chat/stream",{method:"POST",headers:{"Content-Type":"application/json"},signal:controller.signal,body:JSON.stringify({messages:msgs,web_search:webEnabled,memory:localStorage.getItem("sambot_memory")||"",instructions:localStorage.getItem("sambot_instructions")||""})});
+  if(agentEnabled){
+   const response=await fetch("/api/agent/run",{method:"POST",headers:sambotAuthHeaders(),signal:controller.signal,body:JSON.stringify({messages:msgs,model:localStorage.getItem("sambot_model")||""})});
+   if(!response.ok){let j={};try{j=await response.json()}catch(_){}throw new Error(j.detail||j.error||("Agent error HTTP "+response.status))}
+   const j=await response.json();assistantMessage={role:"assistant",content:j.reply||"The agent returned no answer."};if(j.tools_used?.length)assistantMessage.content+="\n\n_Tools used: "+j.tools_used.join(", ")+"_";session.messages.push(assistantMessage);save();renderChat();chat.scrollTop=chat.scrollHeight;if(voiceMode)speakText(assistantMessage.content);return;
+  }
+  const response=await fetch("/api/chat/stream",{method:"POST",headers:sambotAuthHeaders(),signal:controller.signal,body:JSON.stringify({messages:msgs,web_search:webEnabled,memory:localStorage.getItem("sambot_memory")||"",instructions:localStorage.getItem("sambot_instructions")||""})});
   if(!response.ok){let j={};try{j=await response.json()}catch(_){}throw new Error(j.detail||j.error||("Server error HTTP "+response.status))}
   assistantMessage={role:"assistant",content:""};session.messages.push(assistantMessage);save();renderChat();const row=chat.lastElementChild,msgEl=row?.querySelector(".msg"),reader=response.body.getReader(),decoder=new TextDecoder();let buffer="",failed="";
   while(true){const part=await reader.read();if(part.done)break;buffer+=decoder.decode(part.value,{stream:true});const events=buffer.split("\n\n");buffer=events.pop()||"";for(const event of events){const line=event.split("\n").find(x=>x.startsWith("data: "));if(!line)continue;let data;try{data=JSON.parse(line.slice(6))}catch(_){continue}if(data.token){assistantMessage.content+=data.token;if(msgEl)msgEl.innerHTML=renderMarkdown(assistantMessage.content);chat.scrollTop=chat.scrollHeight}if(data.error)failed=data.error}if(failed)throw new Error(failed);save()}
@@ -307,12 +312,14 @@ box.addEventListener("paste",e=>{
     document.getElementById("attachments").textContent="📎 "+attachedFiles.map(f=>f.name).join(", ");
   }
 });
+function sambotAuthHeaders(){const token=localStorage.getItem("sambot_billing_token")||"";return {"Content-Type":"application/json",...(token?{Authorization:"Bearer "+token}:{})}}
 function toggleWeb(){webEnabled=!webEnabled;document.getElementById("webBtn").style.background=webEnabled?"#2c3039":""}
+function toggleAgent(){agentEnabled=!agentEnabled;const b=document.getElementById("agentBtn");b.style.background=agentEnabled?"#334155":"";b.setAttribute("aria-pressed",String(agentEnabled));showChatNotice(agentEnabled?"Agent mode on: Sambot can use web search and a safe calculator, then explain its result.":"Agent mode off.");}
 function toggleDataAnalysis(){dataAnalysisEnabled=!dataAnalysisEnabled;const b=document.getElementById('dataAnalysisBtn');b.style.background=dataAnalysisEnabled?'#155e75':'';b.setAttribute('aria-pressed',String(dataAnalysisEnabled));showChatNotice(dataAnalysisEnabled?'Data analysis mode on: attach a CSV or spreadsheet and ask a question.':'Data analysis mode off.')}
 async function openCalculator(){const expression=prompt('Basic calculator: enter an expression (example: (125*8)/5)');if(!expression)return;try{const r=await fetch('/api/tools/calculate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:expression})});const j=await r.json();if(!r.ok)throw new Error(j.error||'Calculation failed');showChatNotice(expression+' = '+j.result)}catch(e){showChatNotice('Calculator: '+e.message)}}
 async function showCapabilities(){try{const r=await fetch('/api/capabilities');const j=await r.json();const caps=j.capabilities||{};const lines=Object.entries(caps).map(([k,v])=>k+': '+v.join(', ')).join('\n');alert('Sambot X capabilities\n\n'+lines)}catch(e){showChatNotice('Could not load capabilities: '+e.message)}}
 function toggleMemory(){const old=localStorage.getItem("sambot_memory")||"";const value=prompt("What should Sambot remember? (stored only in this browser)",old);if(value!==null)localStorage.setItem("sambot_memory",value)}
-async function uploadFiles(){if(!attachedFiles.length)return "";const fd=new FormData();attachedFiles.forEach(f=>fd.append("files",f));const r=await fetch("/api/files",{method:"POST",body:fd});const j=await r.json();if(!r.ok)throw new Error(j.error||"File upload failed");attachedFiles=[];document.getElementById("fileInput").value="";document.getElementById("attachments").textContent="";return j.text||""}
+async function uploadFiles(question=""){if(!attachedFiles.length)return "";const selected=attachedFiles.slice(),parts=[],images=selected.filter(f=>f.type&&f.type.startsWith("image/")),docs=selected.filter(f=>!images.includes(f));for(const file of images){if(file.size>8*1024*1024)throw new Error(file.name+" is larger than 8 MB.");const dataUrl=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=()=>reject(new Error("Could not read "+file.name));reader.readAsDataURL(file)});const r=await fetch("/api/vision",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({image_data_url:dataUrl,prompt:question||"Describe this image accurately, including any readable text."})});const j=await r.json();if(!r.ok)throw new Error(j.detail||j.error||("Image analysis failed: "+file.name));parts.push("IMAGE ANALYSIS — "+file.name+":\\n"+(j.reply||"No image description returned."))}if(docs.length){const fd=new FormData();docs.forEach(f=>fd.append("files",f));const r=await fetch("/api/files",{method:"POST",body:fd});const j=await r.json();if(!r.ok)throw new Error(j.error||"File upload failed");parts.push(j.text||"")}attachedFiles=[];document.getElementById("fileInput").value="";document.getElementById("attachments").textContent="";return parts.join("\\n\\n")}
 box.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send()}})
 window.newChat=newChat;window.send=send;window.toggleTheme=toggleTheme;window.openSettings=openSettings;window.closeSettings=closeSettings;window.saveSettings=saveSettings;window.exportChats=exportChats;window.toggleSidebar=toggleSidebar;window.voice=voice;window.regenerate=regenerate;window.chatMenu=chatMenu;window.loadChat=loadChat;ensure();renderHistory();renderChat();
 </script>
@@ -384,16 +391,19 @@ def web_search(query):
 
 @app.post("/api/image")
 def image(req: ImageRequest):
+    prompt = req.prompt.strip()
+    if not prompt:
+        return JSONResponse({"error":"Describe the image you want Sambot to create."}, status_code=400)
     account=os.getenv("CLOUDFLARE_ACCOUNT_ID")
     token=os.getenv("CLOUDFLARE_API_TOKEN")
     if not account or not token:
-        return {"error":"Cloudflare image generation is not configured in Render."}
+        return JSONResponse({"error":"Image generation is not configured. Add CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN to the server environment."}, status_code=503)
     url=f"https://api.cloudflare.com/client/v4/accounts/{account}/ai/run/@cf/black-forest-labs/flux-1-schnell"
     try:
         r=requests.post(
             url,
             headers={"Authorization":f"Bearer {token}","Content-Type":"application/json","Accept":"application/json"},
-            json={"prompt":req.prompt,"steps":4},
+            json={"prompt":prompt,"steps":4},
             timeout=120,
         )
         if not r.ok:
@@ -414,12 +424,13 @@ def image(req: ImageRequest):
         except Exception: return {"error":f"Cloudflare returned a non-JSON response (HTTP {r.status_code})."}
         image_b64=data.get("result",{}).get("image")
         if not image_b64:
-            return {"error":f"Cloudflare response did not contain an image: {data}"}
+            return JSONResponse({"error":"The image provider returned an unexpected response. Please try again."}, status_code=502)
         return {"image":f"data:image/jpeg;base64,{image_b64}"}
     except requests.Timeout:
-        return {"error":"Cloudflare image generation timed out. Please try again."}
+        return JSONResponse({"error":"Image generation timed out. Please try again."}, status_code=504)
     except Exception as e:
-        return {"error":f"Cloudflare image generation failed: {type(e).__name__}: {e}"}
+        print(f"SAMBOT_IMAGE_ERROR: {type(e).__name__}: {e}")
+        return JSONResponse({"error":"Image generation failed unexpectedly. Please try again later."}, status_code=502)
 
 class ToolRequest(BaseModel):
     text: str
@@ -488,12 +499,12 @@ async def analyze_csv(file: UploadFile = File(...)):
 @app.get("/api/capabilities")
 def capabilities():
     return {"app":"Sambot X","login_required":False,"capabilities":{
-      "chat":["streaming","model_selection","custom_instructions","local_memory","regenerate","edit_messages"],
+      "chat":["streaming","model_selection","custom_instructions","agent_tool_use","regenerate","edit_messages"],
       "voice":["browser_speech_input","read_aloud","hands_free_voice_mode","language_and_speed_settings"],
-      "media":["cloudflare_image_generation","vision_endpoint","file_uploads"],
-      "tools":["web_search","safe_calculator","csv_statistics","markdown_export","json_import_export"],
-      "storage":["browser_local_history","local_preferences"],
-      "limitations":["no OpenAI private model access","no full Python execution sandbox","no cross-device sync without a server-side identity or shared profile","browser speech support varies"]
+      "media":["cloudflare_image_generation","groq_vision_image_uploads","file_uploads"],
+      "tools":["agent_web_search","agent_safe_calculator","csv_statistics","markdown_export","json_import_export"],
+      "storage":["browser_local_history","local_preferences","account_scoped_private_memory"],
+      "limitations":["no OpenAI private model access","no full Python execution sandbox","chat transcripts remain browser-local; explicitly saved private memories sync by signed-in account","browser speech support varies"]
     }}
 
 @app.post("/api/chat/stream")
