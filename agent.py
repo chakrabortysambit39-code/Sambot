@@ -8,7 +8,7 @@ import json
 import math
 import operator
 import os
-from fastapi import APIRouter, Header, HTTPException
+from fastapi import APIRouter, Header, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from groq import Groq
@@ -81,12 +81,12 @@ TOOLS = [
 ]
 
 @router.post("/run")
-def run_agent(req: AgentRequest, authorization: str | None = Header(default=None)):
+def run_agent(req: AgentRequest, request: Request, authorization: str | None = Header(default=None)):
     key = os.getenv("GROQ_API_KEY")
     if not key:
         return JSONResponse({"error": "AI service is not configured."}, status_code=503)
     try:
-        record_usage(authorization)
+        record_usage(authorization, request.client.host if request and request.client else "unknown")
         allowed = {m["id"] for m in CHAT_MODELS}
         model = req.model if req.model in allowed else os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")
         messages = [{"role": m.role, "content": m.content} for m in req.messages if m.role in ("user", "assistant")]
